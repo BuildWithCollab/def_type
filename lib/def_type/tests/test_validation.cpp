@@ -847,6 +847,31 @@ TEST_CASE("hybrid parse: reports validation errors", "[validation][hybrid][parse
     REQUIRE(result->age == -1);
 }
 
+TEST_CASE("hybrid parse: checked_value throws on invalid", "[validation][hybrid][parse]") {
+    auto dog_type = type_def<HybridValidatedDog>()
+        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
+        .field(&HybridValidatedDog::age, "age", validators(positive{}));
+
+    auto result = dog_type.parse(json{{"name", ""}, {"age", 0}});
+    REQUIRE_THROWS(result.checked_value());
+
+    auto good = dog_type.parse(json{{"name", "Rex"}, {"age", 3}});
+    REQUIRE_NOTHROW(good.checked_value());
+}
+
+TEST_CASE("hybrid parse: operator* and operator-> access", "[validation][hybrid][parse]") {
+    auto dog_type = type_def<HybridValidatedDog>()
+        .field(&HybridValidatedDog::name, "name")
+        .field(&HybridValidatedDog::age, "age");
+
+    auto result = dog_type.parse(json{{"name", "Rex"}, {"age", 3}});
+
+    REQUIRE(result->name == "Rex");
+
+    HybridValidatedDog& instance = *result;
+    REQUIRE(instance.age == 3);
+}
+
 // ═════════════════════════════════════════════════════════════════════════
 // parse_options — configurable strictness
 // ═════════════════════════════════════════════════════════════════════════
