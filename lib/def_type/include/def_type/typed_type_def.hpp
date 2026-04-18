@@ -405,92 +405,13 @@ public:
     T create() const { return T{}; }
 
     // ── Parse JSON with reporting ───────────────────────────────────
+    //
+    // Declared here, defined in detail/dynamic_json.hpp (after json.hpp)
+    // so parse can use value_from_json for complex types (enums,
+    // vectors/maps/optionals of reflected structs).
 
-    parse_result<T> parse(const nlohmann::json& j) const {
-        if (!j.is_object()) throw std::logic_error("parse: expected JSON object");
-
-        parse_result<T> result{.value = T{}};
-
-        // Populate using raw field iteration — handles nested structs recursively
-        detail::for_each_raw_field(result.value, [&](std::string_view name, auto& raw_field) {
-            std::string key(name);
-            if (j.contains(key)) {
-                using InnerType = std::remove_cvref_t<decltype(raw_field.value)>;
-                if constexpr (detail::reflected_struct<InnerType>) {
-                    // Nested struct — recurse via parse
-                    if (j[key].is_object()) {
-                        auto nested_result = type_def<InnerType>{}.parse(j[key]);
-                        raw_field.value = std::move(nested_result.value);
-                    }
-                } else {
-                    try {
-                        raw_field.value = j[key].template get<InnerType>();
-                    } catch (...) {
-                        // Type mismatch — keep default
-                    }
-                }
-            }
-        }, indices_{});
-
-        // Also populate hybrid-registered fields
-        std::apply([&](const auto&... regs) {
-            (([&] {
-                if (j.contains(regs.name)) {
-                    using MemT = std::remove_cvref_t<
-                        decltype(result.value.*(regs.member))>;
-                    try {
-                        result.value.*(regs.member) = j[regs.name].template get<MemT>();
-                    } catch (...) {}
-                }
-            }()), ...);
-        }, typed_regs_);
-
-        // Extra keys
-        auto schema_names_vec = field_names();
-        for (auto& [key, val] : j.items()) {
-            bool found = false;
-            for (auto& schema_name : schema_names_vec)
-                if (key == schema_name) { found = true; break; }
-            if (!found)
-                result.extra_keys_.push_back(key);
-        }
-
-        // Missing fields
-        for (auto& schema_name : schema_names_vec) {
-            if (!j.contains(schema_name))
-                result.missing_fields_.push_back(schema_name);
-        }
-
-        // Validation
-        auto validation_check = validate(result.value);
-        for (auto& error : validation_check.errors())
-            result.validation_errors_.push_back(
-                validation_error{error.path, error.message, error.constraint});
-
-        return result;
-    }
-
-    parse_result<T> parse(const nlohmann::json& j, parse_options options) const {
-        if (options.strict) {
-            options.reject_extra_keys = true;
-            options.require_all_fields = true;
-            options.require_valid = true;
-        }
-
-        auto result = parse(j);
-
-        if (options.reject_extra_keys && result.has_extra_keys())
-            throw parse_error("parse: extra keys in JSON",
-                result.extra_keys_, result.missing_fields_, result.validation_errors_);
-        if (options.require_all_fields && result.has_missing_fields())
-            throw parse_error("parse: missing fields in JSON",
-                result.extra_keys_, result.missing_fields_, result.validation_errors_);
-        if (options.require_valid && !result.valid())
-            throw parse_error("parse: validation errors",
-                result.extra_keys_, result.missing_fields_, result.validation_errors_);
-
-        return result;
-    }
+    inline parse_result<T> parse(const nlohmann::json& j) const;
+    inline parse_result<T> parse(const nlohmann::json& j, parse_options options) const;
 };
 
 }  // namespace def_type

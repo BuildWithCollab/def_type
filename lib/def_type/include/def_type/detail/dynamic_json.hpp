@@ -11,6 +11,7 @@
 #include <def_type/field.hpp>
 #include <def_type/parse.hpp>
 #include <def_type/detail/discovery.hpp>
+#include <def_type/typed_type_def.hpp>
 #include <def_type/dynamic_type_def.hpp>
 #include <def_type/type_instance.hpp>
 #include <def_type/json.hpp>
@@ -189,6 +190,99 @@ type_def<detail::dynamic_tag>::field(
     fd._json_init = std::move(json_init);
     fields_.push_back(std::move(fd));
     return *this;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// type_def<T>::parse() — defined here so it can use value_from_json
+// for complex types (enums, vectors/maps/optionals of reflected structs)
+// ═══════════════════════════════════════════════════════════════════════
+
+template <typename T, typename... Regs>
+parse_result<T> type_def<T, Regs...>::parse(const nlohmann::json& j) const {
+    if (!j.is_object()) throw std::logic_error("parse: expected JSON object");
+
+    parse_result<T> result{.value = T{}};
+
+    // Populate using raw field iteration
+    detail::for_each_raw_field(result.value, [&](std::string_view name, auto& raw_field) {
+        std::string key(name);
+        if (j.contains(key)) {
+            using InnerType = std::remove_cvref_t<decltype(raw_field.value)>;
+            if constexpr (detail::reflected_struct<InnerType>) {
+                // Nested struct — recurse via parse so each inner field
+                // gets its own try-catch (graceful per-field defaults)
+                if (j[key].is_object()) {
+                    auto nested_result = type_def<InnerType>{}.parse(j[key]);
+                    raw_field.value = std::move(nested_result.value);
+                }
+            } else {
+                try {
+                    detail::value_from_json(j[key], raw_field.value);
+                } catch (...) {
+                    // Type mismatch — keep default
+                }
+            }
+        }
+    }, indices_{});
+
+    // Also populate hybrid-registered fields via value_from_json
+    std::apply([&](const auto&... regs) {
+        (([&] {
+            if (j.contains(regs.name)) {
+                try {
+                    detail::value_from_json(j[regs.name], result.value.*(regs.member));
+                } catch (...) {}
+            }
+        }()), ...);
+    }, typed_regs_);
+
+    // Extra keys
+    auto schema_names_vec = field_names();
+    for (auto& [key, val] : j.items()) {
+        bool found = false;
+        for (auto& schema_name : schema_names_vec)
+            if (key == schema_name) { found = true; break; }
+        if (!found)
+            result.extra_keys_.push_back(key);
+    }
+
+    // Missing fields
+    for (auto& schema_name : schema_names_vec) {
+        if (!j.contains(schema_name))
+            result.missing_fields_.push_back(schema_name);
+    }
+
+    // Validation
+    auto validation_check = validate(result.value);
+    for (auto& error : validation_check.errors())
+        result.validation_errors_.push_back(
+            validation_error{error.path, error.message, error.constraint});
+
+    return result;
+}
+
+template <typename T, typename... Regs>
+parse_result<T> type_def<T, Regs...>::parse(
+        const nlohmann::json& j, parse_options options) const {
+    if (options.strict) {
+        options.reject_extra_keys = true;
+        options.require_all_fields = true;
+        options.require_valid = true;
+    }
+
+    auto result = parse(j);
+
+    if (options.reject_extra_keys && result.has_extra_keys())
+        throw parse_error("parse: extra keys in JSON",
+            result.extra_keys_, result.missing_fields_, result.validation_errors_);
+    if (options.require_all_fields && result.has_missing_fields())
+        throw parse_error("parse: missing fields in JSON",
+            result.extra_keys_, result.missing_fields_, result.validation_errors_);
+    if (options.require_valid && !result.valid())
+        throw parse_error("parse: validation errors",
+            result.extra_keys_, result.missing_fields_, result.validation_errors_);
+
+    return result;
 }
 
 }  // namespace def_type
