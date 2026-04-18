@@ -241,6 +241,16 @@ constexpr auto def_type::struct_info<PersonList>() {
 }
 
 template <>
+constexpr auto def_type::struct_info<VecOfVecOfAddresses>() {
+    return def_type::field_info<VecOfVecOfAddresses>("blocks");
+}
+
+template <>
+constexpr auto def_type::struct_info<MapOfVecOfAddresses>() {
+    return def_type::field_info<MapOfVecOfAddresses>("regions");
+}
+
+template <>
 constexpr auto def_type::struct_info<VecOfEnums>() {
     return def_type::field_info<VecOfEnums>("methods");
 }
@@ -429,6 +439,14 @@ struct DenseMapOfStructs {
 struct PersonList {
     field<std::string>         org;
     field<std::vector<Person>> people;
+};
+
+struct VecOfVecOfAddresses {
+    field<std::vector<std::vector<Address>>> blocks;
+};
+
+struct MapOfVecOfAddresses {
+    field<std::map<std::string, std::vector<Address>>> regions;
 };
 
 // ── Enum types ───────────────────────────────────────────────────────────

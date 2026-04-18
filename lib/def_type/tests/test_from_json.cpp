@@ -2164,6 +2164,261 @@ TEST_CASE("dynamic from_json: empty vector of enums", "[from_json][dynamic][enum
 }
 
 // ═════════════════════════════════════════════════════════════════════════
+// Nested containers of structs — vector<vector<struct>>, map<string, vector<struct>>
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("typed from_json: vector<vector<Address>>", "[from_json][typed][nested_container]") {
+    auto j = json{{"blocks", {
+        {{{"street", "1st"}, {"zip", "10001"}}, {{"street", "2nd"}, {"zip", "10002"}}},
+        {{{"street", "3rd"}, {"zip", "20001"}}}
+    }}};
+    auto vva = from_json<VecOfVecOfAddresses>(j);
+
+    REQUIRE(vva.blocks.value.size() == 2);
+    REQUIRE(vva.blocks.value[0].size() == 2);
+    REQUIRE(vva.blocks.value[0][0].street.value == "1st");
+    REQUIRE(vva.blocks.value[0][1].zip.value == "10002");
+    REQUIRE(vva.blocks.value[1].size() == 1);
+    REQUIRE(vva.blocks.value[1][0].street.value == "3rd");
+}
+
+TEST_CASE("dynamic from_json: vector<vector<Address>>", "[from_json][dynamic][nested_container]") {
+    auto t = type_def("VVA_f")
+        .field<std::vector<std::vector<Address>>>("blocks");
+
+    auto j = json{{"blocks", {
+        {{{"street", "1st"}, {"zip", "10001"}}, {{"street", "2nd"}, {"zip", "10002"}}},
+        {{{"street", "3rd"}, {"zip", "20001"}}}
+    }}};
+    auto obj = t.create(j);
+
+    auto blocks = obj.get<std::vector<std::vector<Address>>>("blocks");
+    REQUIRE(blocks.size() == 2);
+    REQUIRE(blocks[0].size() == 2);
+    REQUIRE(blocks[0][0].street.value == "1st");
+    REQUIRE(blocks[1][0].zip.value == "20001");
+}
+
+TEST_CASE("typed round-trip: vector<vector<Address>>", "[json][typed][nested_container][roundtrip]") {
+    VecOfVecOfAddresses original;
+    Address a1; a1.street = "Dog Ln"; a1.zip = "99999";
+    Address a2; a2.street = "Cat St"; a2.zip = "88888";
+    original.blocks.value = {{a1, a2}, {a1}};
+
+    auto restored = from_json<VecOfVecOfAddresses>(to_json(original));
+
+    REQUIRE(restored.blocks.value.size() == 2);
+    REQUIRE(restored.blocks.value[0][1].street.value == "Cat St");
+    REQUIRE(restored.blocks.value[1][0].zip.value == "99999");
+}
+
+TEST_CASE("typed from_json: map<string, vector<Address>>", "[from_json][typed][nested_container]") {
+    auto j = json{{"regions", {
+        {"west", {{{"street", "1st"}, {"zip", "90001"}}, {{"street", "2nd"}, {"zip", "90002"}}}},
+        {"east", {{{"street", "3rd"}, {"zip", "10001"}}}}
+    }}};
+    auto mva = from_json<MapOfVecOfAddresses>(j);
+
+    REQUIRE(mva.regions.value.size() == 2);
+    REQUIRE(mva.regions.value.at("west").size() == 2);
+    REQUIRE(mva.regions.value.at("west")[0].street.value == "1st");
+    REQUIRE(mva.regions.value.at("east")[0].zip.value == "10001");
+}
+
+TEST_CASE("dynamic from_json: map<string, vector<Address>>", "[from_json][dynamic][nested_container]") {
+    auto t = type_def("MVA_f")
+        .field<std::map<std::string, std::vector<Address>>>("regions");
+
+    auto j = json{{"regions", {
+        {"west", {{{"street", "1st"}, {"zip", "90001"}}}},
+        {"east", {{{"street", "3rd"}, {"zip", "10001"}}, {{"street", "4th"}, {"zip", "10002"}}}}
+    }}};
+    auto obj = t.create(j);
+
+    auto regions = obj.get<std::map<std::string, std::vector<Address>>>("regions");
+    REQUIRE(regions.size() == 2);
+    REQUIRE(regions.at("west").size() == 1);
+    REQUIRE(regions.at("east").size() == 2);
+    REQUIRE(regions.at("east")[1].street.value == "4th");
+}
+
+TEST_CASE("typed round-trip: map<string, vector<Address>>", "[json][typed][nested_container][roundtrip]") {
+    MapOfVecOfAddresses original;
+    Address a1; a1.street = "Dog Ln"; a1.zip = "99999";
+    original.regions.value = {{"home", {a1}}};
+
+    auto restored = from_json<MapOfVecOfAddresses>(to_json(original));
+
+    REQUIRE(restored.regions.value.size() == 1);
+    REQUIRE(restored.regions.value.at("home")[0].street.value == "Dog Ln");
+}
+
+// ── Empty containers of structs ──────────────────────────────────────────
+
+TEST_CASE("typed from_json: empty vector of structs", "[from_json][typed][nested_container][empty]") {
+    auto j = json{{"org", "Empty Inc"}, {"people", json::array()}};
+    auto pl = from_json<PersonList>(j);
+
+    REQUIRE(pl.org.value == "Empty Inc");
+    REQUIRE(pl.people.value.empty());
+}
+
+TEST_CASE("dynamic from_json: empty vector of structs", "[from_json][dynamic][nested_container][empty]") {
+    auto t = type_def("PL_empty_f")
+        .field<std::string>("org")
+        .field<std::vector<Person>>("people");
+
+    auto obj = t.create(json{{"org", "Empty Inc"}, {"people", json::array()}});
+
+    REQUIRE(obj.get<std::string>("org") == "Empty Inc");
+    REQUIRE(obj.get<std::vector<Person>>("people").empty());
+}
+
+TEST_CASE("typed from_json: empty map of structs", "[from_json][typed][nested_container][empty]") {
+    auto j = json{{"locations", json::object()}};
+    auto dm = from_json<DenseMapOfStructs>(j);
+
+    REQUIRE(dm.locations.value.empty());
+}
+
+TEST_CASE("dynamic from_json: empty map of structs", "[from_json][dynamic][nested_container][empty]") {
+    auto t = type_def("DM_empty_f")
+        .field<std::map<std::string, Address>>("locations");
+
+    auto obj = t.create(json{{"locations", json::object()}});
+
+    REQUIRE(obj.get<std::map<std::string, Address>>("locations").empty());
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Hybrid from_json — enums and complex collections
+// ═════════════════════════════════════════════════════════════════════════
+
+struct FieldEnumDog {
+    field<std::string>  name;
+    field<HttpMethod>   method;
+    field<Color>        color;
+};
+
+#ifndef DEF_TYPE_HAS_PFR
+template <>
+constexpr auto def_type::struct_info<FieldEnumDog>() {
+    return def_type::field_info<FieldEnumDog>("name", "method", "color");
+}
+#endif
+
+TEST_CASE("hybrid from_json: enum fields deserialize from strings", "[from_json][hybrid][enum]") {
+    // Round-trip to get platform-correct enum strings
+    FieldEnumDog original;
+    original.name = "Rex";
+    original.method = HttpMethod::POST;
+    original.color = Color::blue;
+
+    auto j = to_json(original);
+    auto restored = from_json<FieldEnumDog>(j);
+
+    REQUIRE(restored.name.value == "Rex");
+    REQUIRE(restored.method.value == HttpMethod::POST);
+    REQUIRE(restored.color.value == Color::blue);
+}
+
+TEST_CASE("hybrid from_json: multiple enum fields round-trip", "[json][hybrid][enum][roundtrip]") {
+    FieldEnumDog original;
+    original.name = "Buddy";
+    original.method = HttpMethod::PUT;
+    original.color = Color::green;
+
+    auto j = to_json(original);
+    auto restored = from_json<FieldEnumDog>(j);
+
+    REQUIRE(restored.name.value == "Buddy");
+    REQUIRE(restored.method.value == HttpMethod::PUT);
+    REQUIRE(restored.color.value == Color::green);
+}
+
+struct FieldVecOfStructs {
+    field<std::string>          org;
+    field<std::vector<Address>> addresses;
+};
+
+#ifndef DEF_TYPE_HAS_PFR
+template <>
+constexpr auto def_type::struct_info<FieldVecOfStructs>() {
+    return def_type::field_info<FieldVecOfStructs>("org", "addresses");
+}
+#endif
+
+TEST_CASE("hybrid from_json: vector of structs", "[from_json][hybrid][collection]") {
+    auto j = json{
+        {"org", "Collab"},
+        {"addresses", {
+            {{"street", "1st St"}, {"zip", "10001"}},
+            {{"street", "2nd Ave"}, {"zip", "20002"}}
+        }}
+    };
+    auto result = from_json<FieldVecOfStructs>(j);
+
+    REQUIRE(result.org.value == "Collab");
+    REQUIRE(result.addresses.value.size() == 2);
+    REQUIRE(result.addresses.value[0].street.value == "1st St");
+    REQUIRE(result.addresses.value[1].zip.value == "20002");
+}
+
+TEST_CASE("hybrid round-trip: vector of structs", "[json][hybrid][collection][roundtrip]") {
+    FieldVecOfStructs original;
+    original.org = "Pirates";
+    Address a; a.street = "Dog Ln"; a.zip = "99999";
+    original.addresses.value = {a};
+
+    auto j = to_json(original);
+    auto restored = from_json<FieldVecOfStructs>(j);
+
+    REQUIRE(restored.addresses.value.size() == 1);
+    REQUIRE(restored.addresses.value[0].street.value == "Dog Ln");
+}
+
+struct FieldMapOfStructs {
+    field<std::string>                       label;
+    field<std::map<std::string, Address>>    locations;
+};
+
+#ifndef DEF_TYPE_HAS_PFR
+template <>
+constexpr auto def_type::struct_info<FieldMapOfStructs>() {
+    return def_type::field_info<FieldMapOfStructs>("label", "locations");
+}
+#endif
+
+TEST_CASE("hybrid from_json: map of structs", "[from_json][hybrid][collection]") {
+    auto j = json{
+        {"label", "offices"},
+        {"locations", {
+            {"hq", {{"street", "100 Main"}, {"zip", "97201"}}},
+            {"branch", {{"street", "200 Oak"}, {"zip", "97202"}}}
+        }}
+    };
+    auto result = from_json<FieldMapOfStructs>(j);
+
+    REQUIRE(result.label.value == "offices");
+    REQUIRE(result.locations.value.size() == 2);
+    REQUIRE(result.locations.value.at("hq").street.value == "100 Main");
+    REQUIRE(result.locations.value.at("branch").zip.value == "97202");
+}
+
+TEST_CASE("hybrid round-trip: map of structs", "[json][hybrid][collection][roundtrip]") {
+    FieldMapOfStructs original;
+    original.label = "test";
+    Address a; a.street = "Cat St"; a.zip = "88888";
+    original.locations.value = {{"home", a}};
+
+    auto j = to_json(original);
+    auto restored = from_json<FieldMapOfStructs>(j);
+
+    REQUIRE(restored.locations.value.size() == 1);
+    REQUIRE(restored.locations.value.at("home").zip.value == "88888");
+}
+
+// ═════════════════════════════════════════════════════════════════════════
 // Typed/hybrid round-trip
 // ═════════════════════════════════════════════════════════════════════════
 
