@@ -14,7 +14,7 @@ using json = nlohmann::json;
 // Test types — enums, nested structs, containers of structs
 // ═════════════════════════════════════════════════════════════════════════
 
-enum class Color { Red, Green, Blue };
+enum class ParseColor { Red, Green, Blue };
 
 struct Address {
     field<std::string> street;
@@ -43,7 +43,7 @@ struct PersonWithAddressMap {
 
 struct PetWithColor {
     field<std::string> name;
-    field<Color>       color;
+    field<ParseColor>       color;
 };
 
 #ifndef DEF_TYPE_HAS_PFR
@@ -86,14 +86,14 @@ constexpr auto def_type::struct_info<PetWithColor>() {
 TEST_CASE("from_json: enum round-trips via magic_enum", "[parse][complex][baseline]") {
     PetWithColor pet;
     pet.name = "Whiskers";
-    pet.color = Color::Blue;
+    pet.color = ParseColor::Blue;
 
     auto j = to_json(pet);
     // magic_enum serializes the enum name — just verify it round-trips
     REQUIRE(j["color"].is_string());
 
     auto pet2 = from_json<PetWithColor>(j);
-    REQUIRE(pet2.color.value == Color::Blue);
+    REQUIRE(pet2.color.value == ParseColor::Blue);
 }
 
 TEST_CASE("from_json: vector of reflected structs", "[parse][complex][baseline]") {
@@ -156,12 +156,12 @@ TEST_CASE("typed parse: enum field populated correctly", "[parse][complex][typed
     // Serialize first to get the exact string magic_enum produces
     PetWithColor ref;
     ref.name = "Whiskers";
-    ref.color = Color::Blue;
+    ref.color = ParseColor::Blue;
     auto ref_json = to_json(ref);
 
     // Now parse that JSON back — should round-trip correctly
     auto result = type_def<PetWithColor>{}.parse(ref_json);
-    REQUIRE(result->color.value == Color::Blue);
+    REQUIRE(result->color.value == ParseColor::Blue);
     REQUIRE(result->name.value == "Whiskers");
 }
 
@@ -223,7 +223,7 @@ TEST_CASE("typed parse: map of reflected structs populated correctly", "[parse][
 
 struct ColoredAddress {
     field<std::string> street;
-    field<Color>       door_color;
+    field<ParseColor>       door_color;
 };
 
 struct PersonWithColoredAddresses {
@@ -245,8 +245,8 @@ constexpr auto def_type::struct_info<PersonWithColoredAddresses>() {
 
 TEST_CASE("typed parse: vector of structs containing enums", "[parse][complex][typed][nested]") {
     // Build JSON using serialization to get correct enum string casing
-    ColoredAddress a1; a1.street = "100 Red Rd";  a1.door_color = Color::Red;
-    ColoredAddress a2; a2.street = "200 Blue Bl"; a2.door_color = Color::Blue;
+    ColoredAddress a1; a1.street = "100 Red Rd";  a1.door_color = ParseColor::Red;
+    ColoredAddress a2; a2.street = "200 Blue Bl"; a2.door_color = ParseColor::Blue;
     PersonWithColoredAddresses ref;
     ref.name = "Dave";
     ref.addresses.value = {a1, a2};
@@ -256,6 +256,6 @@ TEST_CASE("typed parse: vector of structs containing enums", "[parse][complex][t
 
     REQUIRE(result->addresses.value.size() == 2);
     REQUIRE(result->addresses.value[0].street.value == "100 Red Rd");
-    REQUIRE(result->addresses.value[0].door_color.value == Color::Red);
-    REQUIRE(result->addresses.value[1].door_color.value == Color::Blue);
+    REQUIRE(result->addresses.value[0].door_color.value == ParseColor::Red);
+    REQUIRE(result->addresses.value[1].door_color.value == ParseColor::Blue);
 }
