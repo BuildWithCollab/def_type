@@ -23,9 +23,11 @@
 #include <vector>
 
 #include <def_type/field.hpp>
-#include <def_type/field_reflect.hpp>
 #include <def_type/meta.hpp>
-#include <def_type/type_def.hpp>
+#include <def_type/reflect.hpp>
+#include <def_type/detail/discovery.hpp>
+#include <def_type/typed_type_def.hpp>
+#include <def_type/type_instance.hpp>
 
 namespace def_type {
 
@@ -215,7 +217,7 @@ namespace detail {
 
 // ── init_json_codec — populates to_json_fn / from_json_fn ───────────────
 //
-// Definition of the template forward-declared in type_def.hpp.
+// Definition of the template forward-declared in detail/discovery.hpp.
 // Called lazily the first time to_json()/load_json() is invoked.
 
 namespace detail {
@@ -262,11 +264,6 @@ T from_json(const std::string& json_str) {
 }
 
 // ── Hybrid to_json / from_json — plain structs with type_def ────────────
-//
-// For structs without field<> members, registered via the hybrid path:
-//   auto t = type_def<PlainDog>().field(&PlainDog::name, "name");
-//   auto j = to_json(dog, t);
-//   auto dog2 = from_json<PlainDog>(j, t);
 
 template <typename T, typename... Regs>
 nlohmann::json to_json(const T& obj, const type_def<T, Regs...>& typedef_schema) {
@@ -293,184 +290,6 @@ T from_json(const nlohmann::json& j, const type_def<T, Regs...>& typedef_schema)
         if (j.contains(key)) detail::value_from_json(j[key], value);
     });
     return result;
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// Inline definitions from field_json.cpp (merged into header)
-// ═══════════════════════════════════════════════════════════════════════
-
-namespace detail {
-
-    inline void ensure_codec(const dynamic_field_def& fd) {
-        if (fd.to_json_fn) return;
-        if (fd._json_init) fd._json_init(fd);
-    }
-
-}  // namespace detail
-
-// ── type_instance::load_json ─────────────────────────────────────────────
-
-inline void type_instance::load_json(const nlohmann::json& j) {
-    if (!j.is_object())
-        throw std::logic_error("load_json: expected JSON object");
-    auto& fields = type_->fields_;
-    for (auto& [key, val] : j.items()) {
-        int idx = find_field_index(key);
-        if (idx < 0) continue;
-        auto& fd = fields[idx];
-        detail::ensure_codec(fd);
-        fd.from_json_fn(values_[idx], std::any(val));
-    }
-}
-
-// ── type_instance::to_json ───────────────────────────────────────────────
-
-inline nlohmann::json type_instance::to_json() const {
-    nlohmann::json j = nlohmann::json::object();
-    auto& fields = type_->fields_;
-    for (std::size_t i = 0; i < fields.size(); ++i) {
-        auto& fd = fields[i];
-        detail::ensure_codec(fd);
-        auto result = fd.to_json_fn(values_[i]);
-        j[fd.name] = *std::any_cast<nlohmann::json>(&result);
-    }
-    return j;
-}
-
-// ── type_instance::to_json_string ────────────────────────────────────────
-
-inline std::string type_instance::to_json_string(int indent) const {
-    return to_json().dump(indent);
-}
-
-// ── type_def<dynamic_tag>::create(json) ──────────────────────────────────
-
-inline type_instance
-type_def<detail::dynamic_tag>::create(const nlohmann::json& j) const {
-    auto obj = create();
-    obj.load_json(j);
-    return obj;
-}
-
-// ── type_def<dynamic_tag>::parse(json) ────────────────────────────────────
-
-inline parse_result<type_instance>
-type_def<detail::dynamic_tag>::parse(const nlohmann::json& j) const {
-    if (!j.is_object())
-        throw std::logic_error("parse: expected JSON object");
-
-    parse_result<type_instance> result{.value = create()};
-
-    // Load fields one at a time, catching type mismatches gracefully
-    std::vector<std::string> json_keys;
-    for (auto& [key, val] : j.items()) {
-        json_keys.push_back(key);
-        int idx = result.value.find_field_index(key);
-        if (idx < 0) continue;
-        auto& fd = fields_[idx];
-        detail::ensure_codec(fd);
-        try {
-            fd.from_json_fn(result.value.values_[idx], std::any(val));
-        } catch (...) {
-            // Type mismatch — keep default value
-        }
-    }
-
-    // Find extra keys (in JSON but not in schema)
-    for (auto& key : json_keys) {
-        if (!has_field(key))
-            result.extra_keys_.push_back(key);
-    }
-
-    // Find missing fields (in schema but not in JSON)
-    for (auto& field_name : field_names()) {
-        bool found = false;
-        for (auto& key : json_keys) {
-            if (key == field_name) { found = true; break; }
-        }
-        if (!found)
-            result.missing_fields_.push_back(field_name);
-    }
-
-    // Run validation
-    auto validation = result.value.validate();
-    for (auto& error : validation.errors())
-        result.validation_errors_.push_back(
-            validation_error{error.path, error.message, error.constraint});
-
-    return result;
-}
-
-// ── type_def<dynamic_tag>::parse(json, options) ──────────────────────────
-
-inline parse_result<type_instance>
-type_def<detail::dynamic_tag>::parse(
-        const nlohmann::json& j, parse_options options) const {
-    if (options.strict) {
-        options.reject_extra_keys = true;
-        options.require_all_fields = true;
-        options.require_valid = true;
-    }
-
-    auto result = parse(j);
-
-    if (options.reject_extra_keys && result.has_extra_keys())
-        throw parse_error("parse: extra keys in JSON",
-            result.extra_keys_, result.missing_fields_, result.validation_errors_);
-    if (options.require_all_fields && result.has_missing_fields())
-        throw parse_error("parse: missing fields in JSON",
-            result.extra_keys_, result.missing_fields_, result.validation_errors_);
-    if (options.require_valid && !result.valid())
-        throw parse_error("parse: validation errors",
-            result.extra_keys_, result.missing_fields_, result.validation_errors_);
-
-    return result;
-}
-
-// ── type_def<dynamic_tag>::field(name, nested_type_def) ──────────────────
-
-inline type_def<detail::dynamic_tag>&
-type_def<detail::dynamic_tag>::field(
-        std::string_view fname,
-        const type_def& nested_type) {
-    const auto* nested_ptr = &nested_type;
-
-    auto setter = [](std::any& target, std::any&& incoming) -> bool {
-        if (auto* p = std::any_cast<type_instance>(&incoming)) {
-            target = std::move(*p);
-            return true;
-        }
-        return false;
-    };
-    auto factory = [nested_ptr]() -> std::any {
-        return std::any(nested_ptr->create());
-    };
-
-    // JSON codec — to_json calls type_instance::to_json(),
-    // from_json creates a fresh instance and calls load_json().
-    auto json_init = [nested_ptr](const detail::dynamic_field_def& fd) {
-        fd.to_json_fn = [](const std::any& a) -> std::any {
-            const auto& instance = *std::any_cast<type_instance>(&a);
-            return std::any(instance.to_json());
-        };
-        fd.from_json_fn = [nested_ptr](std::any& a, const std::any& j_any) {
-            const auto& j = *std::any_cast<nlohmann::json>(&j_any);
-            auto instance = nested_ptr->create();
-            instance.load_json(j);
-            a = std::move(instance);
-        };
-    };
-
-    detail::dynamic_field_def fd{};
-    fd.name = std::string(fname);
-    fd.type = typeid(type_instance);
-    fd.default_value = nested_type.create();
-    fd.has_default = true;
-    fd.setter = std::move(setter);
-    fd.make_default = std::move(factory);
-    fd._json_init = std::move(json_init);
-    fields_.push_back(std::move(fd));
-    return *this;
 }
 
 }  // namespace def_type
