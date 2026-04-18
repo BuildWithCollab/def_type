@@ -93,6 +93,34 @@ public:
             std::move(new_tuple));
     }
 
+    // Overload accepting a nested type_def for schema-level nesting.
+    // The nested type_def's validate/valid are captured into the reg
+    // so the hybrid path can recurse into nested struct validation.
+    template <typename MemT, typename... NestedRegs, typename... Withs>
+    auto field(MemT T::* member, std::string_view fname,
+               const type_def<MemT, NestedRegs...>& nested_td, Withs... withs) {
+        auto new_reg = detail::make_typed_reg<T>(member, fname, withs...);
+        new_reg.nested_validate_fn =
+            [nested_td](const MemT& val, std::string_view prefix) {
+                auto result = nested_td.validate(val);
+                validation_result prefixed;
+                for (auto& err : result.errors()) {
+                    auto full_path = prefix.empty()
+                        ? err.path
+                        : std::string(prefix) + "." + err.path;
+                    prefixed.add({full_path, err.message, err.constraint});
+                }
+                return prefixed;
+            };
+        new_reg.nested_valid_fn =
+            [nested_td](const MemT& val) { return nested_td.valid(val); };
+        auto new_tuple = std::tuple_cat(
+            std::move(typed_regs_),
+            std::make_tuple(std::move(new_reg)));
+        return type_def<T, Regs..., detail::typed_field_reg<T, MemT>>(
+            std::move(new_tuple));
+    }
+
     // ── Field queries by name ────────────────────────────────────────
 
     bool has_field(std::string_view fname) const {
@@ -349,6 +377,10 @@ public:
                     auto errors = regs.validate_fn(obj.*(regs.member), regs.name);
                     if (!errors.empty()) is_valid = false;
                 }
+                if (is_valid && regs.nested_valid_fn) {
+                    if (!regs.nested_valid_fn(obj.*(regs.member)))
+                        is_valid = false;
+                }
             }()), ...);
         }, typed_regs_);
         return is_valid;
@@ -392,6 +424,13 @@ public:
                     auto errors = regs.validate_fn(obj.*(regs.member), full_path);
                     for (auto& error : errors)
                         result.add(std::move(error));
+                }
+                if (regs.nested_validate_fn) {
+                    auto nested_result = regs.nested_validate_fn(
+                        obj.*(regs.member), full_path);
+                    for (auto& error : nested_result.errors())
+                        result.add(validation_error{
+                            error.path, error.message, error.constraint});
                 }
             }()), ...);
         }, typed_regs_);

@@ -305,6 +305,11 @@ namespace def_type::detail {
         std::string             name;
         std::vector<meta_entry> metas;
         detail::field_validator_fn<MemT> validate_fn;
+
+        // Nested schema validation — populated when a nested type_def is
+        // passed as an arg to .field(&T::member, "name", nested_type_def).
+        std::function<validation_result(const MemT&, std::string_view)> nested_validate_fn;
+        std::function<bool(const MemT&)>                                nested_valid_fn;
     };
 
     // Process a single arg in the hybrid .field() builder:

@@ -714,6 +714,198 @@ TEST_CASE("hybrid: fixing values makes validation pass", "[validation][hybrid]")
 }
 
 // ═════════════════════════════════════════════════════════════════════════
+// Hybrid nested validation — .field(&T::member, "name", nested_type_def)
+// ═════════════════════════════════════════════════════════════════════════
+
+struct HybridAddress {
+    std::string street;
+    std::string zip;
+};
+
+struct HybridPerson {
+    std::string name;
+    HybridAddress address;
+};
+
+#ifndef DEF_TYPE_HAS_PFR
+template <>
+constexpr auto def_type::struct_info<HybridAddress>() {
+    return def_type::field_info<HybridAddress>("street", "zip");
+}
+
+template <>
+constexpr auto def_type::struct_info<HybridPerson>() {
+    return def_type::field_info<HybridPerson>("name", "address");
+}
+#endif
+
+TEST_CASE("hybrid nested: inner field fails with dotted paths", "[validation][hybrid][nested]") {
+    auto address_schema = type_def<HybridAddress>()
+        .field(&HybridAddress::street, "street", validators(not_empty{}))
+        .field(&HybridAddress::zip, "zip", validators(not_empty{}));
+
+    auto person_type = type_def<HybridPerson>()
+        .field(&HybridPerson::name, "name", validators(not_empty{}))
+        .field(&HybridPerson::address, "address", address_schema);
+
+    HybridPerson person;
+    person.name = "Alice";
+    // address.street and address.zip are both "" → fail not_empty
+
+    auto result = person_type.validate(person);
+    REQUIRE(!result);
+    REQUIRE(result.error_count() == 2);
+    REQUIRE(result.errors()[0].path == "address.street");
+    REQUIRE(result.errors()[1].path == "address.zip");
+}
+
+TEST_CASE("hybrid nested: outer and inner both fail", "[validation][hybrid][nested]") {
+    auto address_schema = type_def<HybridAddress>()
+        .field(&HybridAddress::zip, "zip", validators(not_empty{}));
+
+    auto person_type = type_def<HybridPerson>()
+        .field(&HybridPerson::name, "name", validators(not_empty{}))
+        .field(&HybridPerson::address, "address", address_schema);
+
+    HybridPerson person;
+    // name is "" and address.zip is ""
+
+    auto result = person_type.validate(person);
+    REQUIRE(result.error_count() == 2);
+    REQUIRE(result.errors()[0].path == "name");
+    REQUIRE(result.errors()[1].path == "address.zip");
+}
+
+TEST_CASE("hybrid nested: valid() short-circuits across nesting", "[validation][hybrid][nested]") {
+    auto address_schema = type_def<HybridAddress>()
+        .field(&HybridAddress::street, "street", validators(not_empty{}));
+
+    auto person_type = type_def<HybridPerson>()
+        .field(&HybridPerson::name, "name")
+        .field(&HybridPerson::address, "address", address_schema);
+
+    HybridPerson person;
+    person.name = "Alice";
+    REQUIRE(!person_type.valid(person));  // address.street is ""
+
+    person.address.street = "123 Main St";
+    REQUIRE(person_type.valid(person));
+}
+
+TEST_CASE("hybrid nested: all valid", "[validation][hybrid][nested]") {
+    auto address_schema = type_def<HybridAddress>()
+        .field(&HybridAddress::street, "street", validators(not_empty{}))
+        .field(&HybridAddress::zip, "zip", validators(not_empty{}));
+
+    auto person_type = type_def<HybridPerson>()
+        .field(&HybridPerson::name, "name", validators(not_empty{}))
+        .field(&HybridPerson::address, "address", address_schema);
+
+    HybridPerson person;
+    person.name = "Alice";
+    person.address.street = "123 Main St";
+    person.address.zip = "97201";
+
+    REQUIRE(person_type.valid(person));
+    REQUIRE(person_type.validate(person).ok());
+}
+
+TEST_CASE("hybrid nested: fixing nested value clears errors", "[validation][hybrid][nested]") {
+    auto address_schema = type_def<HybridAddress>()
+        .field(&HybridAddress::street, "street", validators(not_empty{}));
+
+    auto person_type = type_def<HybridPerson>()
+        .field(&HybridPerson::name, "name")
+        .field(&HybridPerson::address, "address", address_schema);
+
+    HybridPerson person;
+    person.name = "Alice";
+    REQUIRE(!person_type.valid(person));
+
+    person.address.street = "123 Main St";
+    REQUIRE(person_type.valid(person));
+    REQUIRE(person_type.validate(person).ok());
+}
+
+struct HybridLeaf {
+    std::string tag;
+};
+
+struct HybridMiddle {
+    std::string label;
+    HybridLeaf leaf;
+};
+
+struct HybridRoot {
+    std::string name;
+    HybridMiddle middle;
+};
+
+#ifndef DEF_TYPE_HAS_PFR
+template <>
+constexpr auto def_type::struct_info<HybridLeaf>() {
+    return def_type::field_info<HybridLeaf>("tag");
+}
+
+template <>
+constexpr auto def_type::struct_info<HybridMiddle>() {
+    return def_type::field_info<HybridMiddle>("label", "leaf");
+}
+
+template <>
+constexpr auto def_type::struct_info<HybridRoot>() {
+    return def_type::field_info<HybridRoot>("name", "middle");
+}
+#endif
+
+TEST_CASE("hybrid nested: 3-level deep dotted paths", "[validation][hybrid][nested]") {
+    auto leaf_schema = type_def<HybridLeaf>()
+        .field(&HybridLeaf::tag, "tag", validators(not_empty{}));
+
+    auto middle_schema = type_def<HybridMiddle>()
+        .field(&HybridMiddle::label, "label")
+        .field(&HybridMiddle::leaf, "leaf", leaf_schema);
+
+    auto root_type = type_def<HybridRoot>()
+        .field(&HybridRoot::name, "name")
+        .field(&HybridRoot::middle, "middle", middle_schema);
+
+    HybridRoot root;
+    root.name = "top";
+    root.middle.label = "mid";
+    // root.middle.leaf.tag is "" → fail
+
+    auto result = root_type.validate(root);
+    REQUIRE(result.error_count() == 1);
+    REQUIRE(result.errors()[0].path == "middle.leaf.tag");
+}
+
+TEST_CASE("hybrid nested: validators + metas mixed with nested schema", "[validation][hybrid][nested]") {
+    auto address_schema = type_def<HybridAddress>()
+        .field(&HybridAddress::street, "street", validators(not_empty{}))
+        .field(&HybridAddress::zip, "zip", validators(not_empty{}));
+
+    auto person_type = type_def<HybridPerson>()
+        .field(&HybridPerson::name, "name", validators(not_empty{}))
+        .field(&HybridPerson::address, "address", address_schema,
+            with<spike_help_info>({.summary = "Mailing address"}));
+
+    // Meta accessible
+    REQUIRE(person_type.field("address").has_meta<spike_help_info>());
+    REQUIRE(std::string_view{person_type.field("address").meta<spike_help_info>().summary}
+        == "Mailing address");
+
+    // Nested validation still works
+    HybridPerson person;
+    person.name = "Alice";
+    REQUIRE(!person_type.valid(person));
+
+    person.address.street = "123 Main";
+    person.address.zip = "97201";
+    REQUIRE(person_type.valid(person));
+}
+
+// ═════════════════════════════════════════════════════════════════════════
 // parse_result on typed path — parse<T>(json)
 // ═════════════════════════════════════════════════════════════════════════
 
