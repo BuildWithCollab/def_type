@@ -11,18 +11,18 @@ module;
 #include <typeindex>
 #include <typeinfo>
 
-module collab.core;
+module def_type;
 
 // ── Lazy codec init ──────────────────────────────────────────────────────
 
-static void ensure_codec(const collab::model::detail::dynamic_field_def& fd) {
+static void ensure_codec(const def_type::detail::dynamic_field_def& fd) {
     if (fd.to_json_fn) return;
     if (fd._json_init) fd._json_init(fd);
 }
 
 // ── type_instance::load_json ─────────────────────────────────────────────
 
-void collab::model::type_instance::load_json(const nlohmann::json& j) {
+void def_type::type_instance::load_json(const nlohmann::json& j) {
     if (!j.is_object())
         throw std::logic_error("load_json: expected JSON object");
     auto& fields = type_->fields_;
@@ -37,7 +37,7 @@ void collab::model::type_instance::load_json(const nlohmann::json& j) {
 
 // ── type_instance::to_json ───────────────────────────────────────────────
 
-nlohmann::json collab::model::type_instance::to_json() const {
+nlohmann::json def_type::type_instance::to_json() const {
     nlohmann::json j = nlohmann::json::object();
     auto& fields = type_->fields_;
     for (std::size_t i = 0; i < fields.size(); ++i) {
@@ -51,14 +51,14 @@ nlohmann::json collab::model::type_instance::to_json() const {
 
 // ── type_instance::to_json_string ────────────────────────────────────────
 
-std::string collab::model::type_instance::to_json_string(int indent) const {
+std::string def_type::type_instance::to_json_string(int indent) const {
     return to_json().dump(indent);
 }
 
 // ── type_def<dynamic_tag>::create(json) ──────────────────────────────────
 
-collab::model::type_instance
-collab::model::type_def<collab::model::detail::dynamic_tag>::create(
+def_type::type_instance
+def_type::type_def<def_type::detail::dynamic_tag>::create(
         const nlohmann::json& j) const {
     auto obj = create();
     obj.load_json(j);
@@ -67,8 +67,8 @@ collab::model::type_def<collab::model::detail::dynamic_tag>::create(
 
 // ── type_def<dynamic_tag>::parse(json) ────────────────────────────────────
 
-collab::model::parse_result<collab::model::type_instance>
-collab::model::type_def<collab::model::detail::dynamic_tag>::parse(
+def_type::parse_result<def_type::type_instance>
+def_type::type_def<def_type::detail::dynamic_tag>::parse(
         const nlohmann::json& j) const {
     if (!j.is_object())
         throw std::logic_error("parse: expected JSON object");
@@ -117,8 +117,8 @@ collab::model::type_def<collab::model::detail::dynamic_tag>::parse(
 
 // ── type_def<dynamic_tag>::parse(json, options) ──────────────────────────
 
-collab::model::parse_result<collab::model::type_instance>
-collab::model::type_def<collab::model::detail::dynamic_tag>::parse(
+def_type::parse_result<def_type::type_instance>
+def_type::type_def<def_type::detail::dynamic_tag>::parse(
         const nlohmann::json& j, parse_options options) const {
     if (options.strict) {
         options.reject_extra_keys = true;
@@ -143,8 +143,8 @@ collab::model::type_def<collab::model::detail::dynamic_tag>::parse(
 
 // ── type_def<dynamic_tag>::field(name, nested_type_def) ──────────────────
 
-collab::model::type_def<collab::model::detail::dynamic_tag>&
-collab::model::type_def<collab::model::detail::dynamic_tag>::field(
+def_type::type_def<def_type::detail::dynamic_tag>&
+def_type::type_def<def_type::detail::dynamic_tag>::field(
         std::string_view fname,
         const type_def& nested_type) {
     const auto* nested_ptr = &nested_type;

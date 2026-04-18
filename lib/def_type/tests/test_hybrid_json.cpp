@@ -28,13 +28,13 @@ struct HybridPoint {
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<HybridDog>() {
-    return collab::model::field_info<HybridDog>("name", "age", "breed");
+constexpr auto def_type::struct_info<HybridDog>() {
+    return def_type::field_info<HybridDog>("name", "age", "breed");
 }
 
 template <>
-constexpr auto collab::model::struct_info<HybridPoint>() {
-    return collab::model::field_info<HybridPoint>("x", "y");
+constexpr auto def_type::struct_info<HybridPoint>() {
+    return def_type::field_info<HybridPoint>("x", "y");
 }
 #endif
 
@@ -108,7 +108,7 @@ TEST_CASE("hybrid json: to_json with type_def — only registered fields", "[hyb
 TEST_CASE("hybrid json: from_json with type_def — basic", "[hybrid][from_json][json]") {
     auto j = json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}};
 
-    auto dog = collab::model::from_json<HybridDog>(j, hybrid_dog_type);
+    auto dog = def_type::from_json<HybridDog>(j, hybrid_dog_type);
 
     REQUIRE(dog.name == "Rex");
     REQUIRE(dog.age == 3);
@@ -118,7 +118,7 @@ TEST_CASE("hybrid json: from_json with type_def — basic", "[hybrid][from_json]
 TEST_CASE("hybrid json: from_json with type_def — missing keys keep defaults", "[hybrid][from_json][json]") {
     auto j = json{{"name", "Rex"}};
 
-    auto dog = collab::model::from_json<HybridDog>(j, hybrid_dog_type);
+    auto dog = def_type::from_json<HybridDog>(j, hybrid_dog_type);
 
     REQUIRE(dog.name == "Rex");
     REQUIRE(dog.age == 0);
@@ -128,14 +128,14 @@ TEST_CASE("hybrid json: from_json with type_def — missing keys keep defaults",
 TEST_CASE("hybrid json: from_json with type_def — extra keys ignored", "[hybrid][from_json][json]") {
     auto j = json{{"name", "Rex"}, {"age", 3}, {"unknown", "ignored"}};
 
-    auto dog = collab::model::from_json<HybridDog>(j, hybrid_dog_type);
+    auto dog = def_type::from_json<HybridDog>(j, hybrid_dog_type);
 
     REQUIRE(dog.name == "Rex");
     REQUIRE(dog.age == 3);
 }
 
 TEST_CASE("hybrid json: from_json with type_def — empty JSON gives defaults", "[hybrid][from_json][json]") {
-    auto dog = collab::model::from_json<HybridDog>(json::object(), hybrid_dog_type);
+    auto dog = def_type::from_json<HybridDog>(json::object(), hybrid_dog_type);
 
     REQUIRE(dog.name == "");
     REQUIRE(dog.age == 0);
@@ -150,7 +150,7 @@ TEST_CASE("hybrid json: round-trip to_json then from_json", "[hybrid][json][roun
     original.breed = "Golden";
 
     auto j = to_json(original, hybrid_dog_type);
-    auto restored = collab::model::from_json<HybridDog>(j, hybrid_dog_type);
+    auto restored = def_type::from_json<HybridDog>(j, hybrid_dog_type);
 
     REQUIRE(restored.name == "Buddy");
     REQUIRE(restored.age == 5);
@@ -160,11 +160,11 @@ TEST_CASE("hybrid json: round-trip to_json then from_json", "[hybrid][json][roun
 // ── Error cases ─────────────────────────────────────────────────────────
 
 TEST_CASE("hybrid json: from_json throws on non-object", "[hybrid][from_json][json][throw]") {
-    REQUIRE_THROWS_AS(collab::model::from_json<HybridDog>(json(42), hybrid_dog_type), std::logic_error);
-    REQUIRE_THROWS_AS(collab::model::from_json<HybridDog>(json::array(), hybrid_dog_type), std::logic_error);
+    REQUIRE_THROWS_AS(def_type::from_json<HybridDog>(json(42), hybrid_dog_type), std::logic_error);
+    REQUIRE_THROWS_AS(def_type::from_json<HybridDog>(json::array(), hybrid_dog_type), std::logic_error);
 }
 
 TEST_CASE("hybrid json: from_json throws on type mismatch", "[hybrid][from_json][json][throw]") {
     auto j = json{{"name", 42}};  // name should be string
-    REQUIRE_THROWS_AS(collab::model::from_json<HybridDog>(j, hybrid_dog_type), std::logic_error);
+    REQUIRE_THROWS_AS(def_type::from_json<HybridDog>(j, hybrid_dog_type), std::logic_error);
 }

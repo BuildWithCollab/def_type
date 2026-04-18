@@ -14,9 +14,9 @@ module;
 
 #include <nameof.hpp>
 
-export module collab.core:field;
+export module def_type:field;
 
-export namespace collab::model {
+export namespace def_type {
 
 // ── validation_error — shared across all paths ──────────────────────────
 
@@ -142,8 +142,8 @@ concept is_field = detail::is_field_v<std::remove_cvref_t<T>>;
 //
 // Example:
 //   template <>
-//   constexpr auto collab::model::struct_info<MyArgs>() {
-//       return collab::model::field_info<MyArgs>("name", "age", "active");
+//   constexpr auto def_type::struct_info<MyArgs>() {
+//       return def_type::field_info<MyArgs>("name", "age", "active");
 //   }
 
 template <typename T>
@@ -170,4 +170,4 @@ namespace detail {
 
 }  // namespace detail
 
-}  // namespace collab::model
+}  // namespace def_type

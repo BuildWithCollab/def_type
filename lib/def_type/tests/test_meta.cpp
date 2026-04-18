@@ -4,9 +4,9 @@
 #include <string_view>
 #include <type_traits>
 
-import collab.core;
+import def_type;
 
-using namespace collab::model;
+using namespace def_type;
 
 // ── Test metadata types ──────────────────────────────────────────────────
 
@@ -98,8 +98,8 @@ TEST_CASE("is_meta rejects non-meta types", "[meta][concept]") {
     STATIC_REQUIRE(!is_meta<int>);
     STATIC_REQUIRE(!is_meta<std::string>);
     STATIC_REQUIRE(!is_meta<endpoint_info>);
-    STATIC_REQUIRE(!is_meta<collab::model::field<int>>);
-    STATIC_REQUIRE(!is_meta<collab::model::field<std::string>>);
+    STATIC_REQUIRE(!is_meta<def_type::field<int>>);
+    STATIC_REQUIRE(!is_meta<def_type::field<std::string>>);
 }
 
 TEST_CASE("is_meta handles cv-qualified and reference types", "[meta][concept]") {

@@ -17,8 +17,8 @@ struct FieldTypeDefContainer {
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<FieldTypeDefContainer>() {
-    return collab::model::field_info<FieldTypeDefContainer>("name", "details");
+constexpr auto def_type::struct_info<FieldTypeDefContainer>() {
+    return def_type::field_info<FieldTypeDefContainer>("name", "details");
 }
 #endif
 

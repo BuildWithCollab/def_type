@@ -3,9 +3,9 @@
 #include <string>
 #include <string_view>
 
-import collab.core;
+import def_type;
 
-using namespace collab::model;
+using namespace def_type;
 
 // ═════════════════════════════════════════════════════════════════════════
 // Test structs
@@ -23,13 +23,13 @@ struct PlainCat {
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<SchemaTestDog>() {
-    return collab::model::field_info<SchemaTestDog>("name", "age");
+constexpr auto def_type::struct_info<SchemaTestDog>() {
+    return def_type::field_info<SchemaTestDog>("name", "age");
 }
 
 template <>
-constexpr auto collab::model::struct_info<PlainCat>() {
-    return collab::model::field_info<PlainCat>("name", "age");
+constexpr auto def_type::struct_info<PlainCat>() {
+    return def_type::field_info<PlainCat>("name", "age");
 }
 #endif
 

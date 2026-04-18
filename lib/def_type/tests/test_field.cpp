@@ -6,9 +6,9 @@
 #include <type_traits>
 #include <vector>
 
-import collab.core;
+import def_type;
 
-using namespace collab::model;
+using namespace def_type;
 
 // ── Domain-specific extension structs ───────────────────────────────────
 
@@ -35,23 +35,23 @@ struct LoginResponse;
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<WeatherArgs>() {
-    return collab::model::field_info<WeatherArgs>("city", "days", "verbose", "tags");
+constexpr auto def_type::struct_info<WeatherArgs>() {
+    return def_type::field_info<WeatherArgs>("city", "days", "verbose", "tags");
 }
 
 template <>
-constexpr auto collab::model::struct_info<OnlyFields>() {
-    return collab::model::field_info<OnlyFields>("a", "b");
+constexpr auto def_type::struct_info<OnlyFields>() {
+    return def_type::field_info<OnlyFields>("a", "b");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MixedStruct>() {
-    return collab::model::field_info<MixedStruct>("a", "plain", "b", "helper");
+constexpr auto def_type::struct_info<MixedStruct>() {
+    return def_type::field_info<MixedStruct>("a", "plain", "b", "helper");
 }
 
 template <>
-constexpr auto collab::model::struct_info<LoginResponse>() {
-    return collab::model::field_info<LoginResponse>("session_id", "user_name");
+constexpr auto def_type::struct_info<LoginResponse>() {
+    return def_type::field_info<LoginResponse>("session_id", "user_name");
 }
 #endif
 

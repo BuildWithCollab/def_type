@@ -5,10 +5,10 @@
 
 #include <string>
 
-import collab.core;
+import def_type;
 
-using namespace collab::model;
-using namespace collab::model::validations;
+using namespace def_type;
+using namespace def_type::validations;
 using json = nlohmann::json;
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -534,18 +534,18 @@ struct HybridValidatedDog;
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<ValidatedDog>() {
-    return collab::model::field_info<ValidatedDog>("name", "age", "breed");
+constexpr auto def_type::struct_info<ValidatedDog>() {
+    return def_type::field_info<ValidatedDog>("name", "age", "breed");
 }
 
 template <>
-constexpr auto collab::model::struct_info<ParseableDog>() {
-    return collab::model::field_info<ParseableDog>("name", "age", "breed");
+constexpr auto def_type::struct_info<ParseableDog>() {
+    return def_type::field_info<ParseableDog>("name", "age", "breed");
 }
 
 template <>
-constexpr auto collab::model::struct_info<HybridValidatedDog>() {
-    return collab::model::field_info<HybridValidatedDog>("name", "age", "breed");
+constexpr auto def_type::struct_info<HybridValidatedDog>() {
+    return def_type::field_info<HybridValidatedDog>("name", "age", "breed");
 }
 #endif
 
@@ -859,7 +859,7 @@ TEST_CASE("dynamic parse_options: reject_extra_keys throws", "[validation][dynam
     REQUIRE_THROWS_AS(
         dog_type.parse(json{{"name", "Rex"}, {"age", 3}, {"color", "brown"}},
             {.reject_extra_keys = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("dynamic parse_options: reject_extra_keys does not throw when no extras", "[validation][dynamic][parse_options]") {
@@ -881,7 +881,7 @@ TEST_CASE("dynamic parse_options: require_all_fields throws on missing", "[valid
     REQUIRE_THROWS_AS(
         dog_type.parse(json{{"name", "Rex"}},
             {.require_all_fields = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("dynamic parse_options: require_valid throws on validation errors", "[validation][dynamic][parse_options]") {
@@ -892,7 +892,7 @@ TEST_CASE("dynamic parse_options: require_valid throws on validation errors", "[
     REQUIRE_THROWS_AS(
         dog_type.parse(json{{"name", ""}},
             {.require_valid = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("dynamic parse_options: strict sets all three", "[validation][dynamic][parse_options]") {
@@ -905,7 +905,7 @@ TEST_CASE("dynamic parse_options: strict sets all three", "[validation][dynamic]
     REQUIRE_THROWS_AS(
         dog_type.parse(json{{"name", ""}, {"unknown", true}},
             {.strict = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("dynamic parse_options: parse_error carries structured data", "[validation][dynamic][parse_options]") {
@@ -916,8 +916,8 @@ TEST_CASE("dynamic parse_options: parse_error carries structured data", "[valida
 
     REQUIRE_THROWS_MATCHES(
         dog_type.parse(json{{"name", ""}, {"unknown", true}}, {.strict = true}),
-        collab::model::parse_error,
-        Catch::Matchers::Predicate<collab::model::parse_error>(
+        def_type::parse_error,
+        Catch::Matchers::Predicate<def_type::parse_error>(
             [](const auto& error) {
                 return error.extra_keys().size() == 1
                     && error.missing_fields().size() == 1
@@ -1009,13 +1009,13 @@ struct ValidatedPerson {
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<ValidatedAddress>() {
-    return collab::model::field_info<ValidatedAddress>("street", "zip");
+constexpr auto def_type::struct_info<ValidatedAddress>() {
+    return def_type::field_info<ValidatedAddress>("street", "zip");
 }
 
 template <>
-constexpr auto collab::model::struct_info<ValidatedPerson>() {
-    return collab::model::field_info<ValidatedPerson>("name", "address");
+constexpr auto def_type::struct_info<ValidatedPerson>() {
+    return def_type::field_info<ValidatedPerson>("name", "address");
 }
 #endif
 
@@ -1146,18 +1146,18 @@ struct ValidatedRoot {
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<ValidatedLeaf>() {
-    return collab::model::field_info<ValidatedLeaf>("tag");
+constexpr auto def_type::struct_info<ValidatedLeaf>() {
+    return def_type::field_info<ValidatedLeaf>("tag");
 }
 
 template <>
-constexpr auto collab::model::struct_info<ValidatedMiddle>() {
-    return collab::model::field_info<ValidatedMiddle>("label", "leaf");
+constexpr auto def_type::struct_info<ValidatedMiddle>() {
+    return def_type::field_info<ValidatedMiddle>("label", "leaf");
 }
 
 template <>
-constexpr auto collab::model::struct_info<ValidatedRoot>() {
-    return collab::model::field_info<ValidatedRoot>("name", "middle");
+constexpr auto def_type::struct_info<ValidatedRoot>() {
+    return def_type::field_info<ValidatedRoot>("name", "middle");
 }
 #endif
 
@@ -1204,7 +1204,7 @@ TEST_CASE("typed parse_options: reject_extra_keys throws", "[validation][typed][
         type_def<ParseableDog>{}.parse(
             json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}, {"color", "brown"}},
             {.reject_extra_keys = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("typed parse_options: reject_extra_keys does not throw when no extras", "[validation][typed][parse_options]") {
@@ -1219,7 +1219,7 @@ TEST_CASE("typed parse_options: require_all_fields throws on missing", "[validat
         type_def<ParseableDog>{}.parse(
             json{{"name", "Rex"}},
             {.require_all_fields = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("typed parse_options: require_all_fields does not throw when all present", "[validation][typed][parse_options]") {
@@ -1234,7 +1234,7 @@ TEST_CASE("typed parse_options: require_valid throws on validation errors", "[va
         type_def<ParseableDog>{}.parse(
             json{{"name", ""}, {"age", -5}, {"breed", "Husky"}},
             {.require_valid = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("typed parse_options: require_valid does not throw when valid", "[validation][typed][parse_options]") {
@@ -1249,7 +1249,7 @@ TEST_CASE("typed parse_options: strict sets all three", "[validation][typed][par
         type_def<ParseableDog>{}.parse(
             json{{"name", ""}, {"unknown", true}},
             {.strict = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("typed parse_options: strict does not throw on clean input", "[validation][typed][parse_options]") {
@@ -1263,8 +1263,8 @@ TEST_CASE("typed parse_options: parse_error carries structured data", "[validati
     REQUIRE_THROWS_MATCHES(
         type_def<ParseableDog>{}.parse(
             json{{"name", ""}, {"unknown", true}}, {.strict = true}),
-        collab::model::parse_error,
-        Catch::Matchers::Predicate<collab::model::parse_error>(
+        def_type::parse_error,
+        Catch::Matchers::Predicate<def_type::parse_error>(
             [](const auto& error) {
                 return error.extra_keys().size() == 1
                     && error.extra_keys()[0] == "unknown"
@@ -1286,7 +1286,7 @@ TEST_CASE("hybrid parse_options: reject_extra_keys throws", "[validation][hybrid
     REQUIRE_THROWS_AS(
         dog_type.parse(json{{"name", "Rex"}, {"age", 3}, {"unknown", true}},
             {.reject_extra_keys = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("hybrid parse_options: reject_extra_keys does not throw when no extras", "[validation][hybrid][parse_options]") {
@@ -1308,7 +1308,7 @@ TEST_CASE("hybrid parse_options: require_all_fields throws on missing", "[valida
     REQUIRE_THROWS_AS(
         dog_type.parse(json{{"name", "Rex"}},
             {.require_all_fields = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("hybrid parse_options: require_valid throws on validation errors", "[validation][hybrid][parse_options]") {
@@ -1319,7 +1319,7 @@ TEST_CASE("hybrid parse_options: require_valid throws on validation errors", "[v
     REQUIRE_THROWS_AS(
         dog_type.parse(json{{"name", ""}, {"age", 3}},
             {.require_valid = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("hybrid parse_options: strict throws on any issue", "[validation][hybrid][parse_options]") {
@@ -1330,7 +1330,7 @@ TEST_CASE("hybrid parse_options: strict throws on any issue", "[validation][hybr
     REQUIRE_THROWS_AS(
         dog_type.parse(json{{"name", ""}, {"unknown", 1}},
             {.strict = true}),
-        collab::model::parse_error);
+        def_type::parse_error);
 }
 
 TEST_CASE("hybrid parse_options: strict does not throw on clean input", "[validation][hybrid][parse_options]") {
@@ -1350,8 +1350,8 @@ TEST_CASE("hybrid parse_options: parse_error carries structured data", "[validat
 
     REQUIRE_THROWS_MATCHES(
         dog_type.parse(json{{"name", ""}, {"unknown", true}}, {.strict = true}),
-        collab::model::parse_error,
-        Catch::Matchers::Predicate<collab::model::parse_error>(
+        def_type::parse_error,
+        Catch::Matchers::Predicate<def_type::parse_error>(
             [](const auto& error) {
                 return error.extra_keys().size() == 1
                     && error.missing_fields().size() == 1
@@ -1429,8 +1429,8 @@ struct TypedMixedDog {
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<TypedMixedDog>() {
-    return collab::model::field_info<TypedMixedDog>("name", "age", "breed");
+constexpr auto def_type::struct_info<TypedMixedDog>() {
+    return def_type::field_info<TypedMixedDog>("name", "age", "breed");
 }
 #endif
 

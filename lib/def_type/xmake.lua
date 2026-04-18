@@ -1,4 +1,4 @@
-target("collab.core")
+target("def_type")
     set_kind("static")
     add_files("src/**.cpp")
     add_files("src/**.cppm", { public = true })
@@ -14,9 +14,9 @@ target("collab.core")
     end
 
 if get_config("build_tests") then
-    target("tests-collab.core")
+    target("tests-def_type")
         set_kind("binary")
         add_files("tests/**.cpp")
-        add_deps("collab.core")
+        add_deps("def_type")
         add_packages("catch2")
 end

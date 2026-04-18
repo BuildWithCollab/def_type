@@ -4,9 +4,9 @@
 
 #include <string>
 
-import collab.core;
+import def_type;
 
-using namespace collab::model;
+using namespace def_type;
 using json = nlohmann::json;
 
 // ═════════════════════════════════════════════════════════════════════════

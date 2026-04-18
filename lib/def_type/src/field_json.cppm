@@ -19,14 +19,14 @@ module;
 #include <utility>
 #include <vector>
 
-export module collab.core:field_json;
+export module def_type:field_json;
 
 import :field;
 import :field_reflect;
 import :meta;
 import :type_def;
 
-export namespace collab::model {
+export namespace def_type {
 
 // ── Shared type traits ──────────────────────────────────────────────────
 
@@ -299,4 +299,4 @@ T from_json(const nlohmann::json& j, const type_def<T, Regs...>& typedef_schema)
 
 
 
-}  // namespace collab::model
+}  // namespace def_type

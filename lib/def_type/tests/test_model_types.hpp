@@ -10,9 +10,9 @@
 #include <type_traits>
 #include <vector>
 
-import collab.core;
+import def_type;
 
-using namespace collab::model;
+using namespace def_type;
 
 // ═════════════════════════════════════════════════════════════════════════
 // Metadata types — shared across all capability test files
@@ -137,57 +137,57 @@ struct MultiTagDog {
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<SimpleArgs>() {
-    return collab::model::field_info<SimpleArgs>("name", "age", "active");
+constexpr auto def_type::struct_info<SimpleArgs>() {
+    return def_type::field_info<SimpleArgs>("name", "age", "active");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Dog>() {
-    return collab::model::field_info<Dog>("endpoint", "help", "name", "age", "breed");
+constexpr auto def_type::struct_info<Dog>() {
+    return def_type::field_info<Dog>("endpoint", "help", "name", "age", "breed");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MixedStruct>() {
-    return collab::model::field_info<MixedStruct>("help", "label", "counter", "score");
+constexpr auto def_type::struct_info<MixedStruct>() {
+    return def_type::field_info<MixedStruct>("help", "label", "counter", "score");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MultiTagged>() {
-    return collab::model::field_info<MultiTagged>("tag1", "tag2", "tag3", "name");
+constexpr auto def_type::struct_info<MultiTagged>() {
+    return def_type::field_info<MultiTagged>("tag1", "tag2", "tag3", "name");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MetaOnly>() {
-    return collab::model::field_info<MetaOnly>("endpoint", "help");
+constexpr auto def_type::struct_info<MetaOnly>() {
+    return def_type::field_info<MetaOnly>("endpoint", "help");
 }
 
 template <>
-constexpr auto collab::model::struct_info<SingleField>() {
-    return collab::model::field_info<SingleField>("value");
+constexpr auto def_type::struct_info<SingleField>() {
+    return def_type::field_info<SingleField>("value");
 }
 
 template <>
-constexpr auto collab::model::struct_info<CliArgs>() {
-    return collab::model::field_info<CliArgs>("help", "query", "verbose", "limit");
+constexpr auto def_type::struct_info<CliArgs>() {
+    return def_type::field_info<CliArgs>("help", "query", "verbose", "limit");
 }
 
 template <>
-constexpr auto collab::model::struct_info<PlainDog>() {
-    return collab::model::field_info<PlainDog>("name", "age", "breed");
+constexpr auto def_type::struct_info<PlainDog>() {
+    return def_type::field_info<PlainDog>("name", "age", "breed");
 }
 
 template <>
-constexpr auto collab::model::struct_info<PlainPoint>() {
-    return collab::model::field_info<PlainPoint>("x", "y");
+constexpr auto def_type::struct_info<PlainPoint>() {
+    return def_type::field_info<PlainPoint>("x", "y");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MetaDog>() {
-    return collab::model::field_info<MetaDog>("help", "name", "age");
+constexpr auto def_type::struct_info<MetaDog>() {
+    return def_type::field_info<MetaDog>("help", "name", "age");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MultiTagDog>() {
-    return collab::model::field_info<MultiTagDog>("tag1", "tag2", "help", "name", "age");
+constexpr auto def_type::struct_info<MultiTagDog>() {
+    return def_type::field_info<MultiTagDog>("tag1", "tag2", "help", "name", "age");
 }
 #endif

@@ -16,9 +16,9 @@
 #include <unordered_set>
 #include <vector>
 
-import collab.core;
+import def_type;
 
-using namespace collab::model;
+using namespace def_type;
 using json = nlohmann::json;
 
 // ── Forward declarations for struct_info fallbacks ──────────────────────
@@ -66,203 +66,203 @@ struct HJsonMetaOnly;
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<SimpleArgs>() {
-    return collab::model::field_info<SimpleArgs>("name", "age", "active");
+constexpr auto def_type::struct_info<SimpleArgs>() {
+    return def_type::field_info<SimpleArgs>("name", "age", "active");
 }
 
 template <>
-constexpr auto collab::model::struct_info<WithDefaults>() {
-    return collab::model::field_info<WithDefaults>("city", "days");
+constexpr auto def_type::struct_info<WithDefaults>() {
+    return def_type::field_info<WithDefaults>("city", "days");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Address>() {
-    return collab::model::field_info<Address>("street", "zip");
+constexpr auto def_type::struct_info<Address>() {
+    return def_type::field_info<Address>("street", "zip");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Person>() {
-    return collab::model::field_info<Person>("name", "address");
+constexpr auto def_type::struct_info<Person>() {
+    return def_type::field_info<Person>("name", "address");
 }
 
 template <>
-constexpr auto collab::model::struct_info<TaggedItem>() {
-    return collab::model::field_info<TaggedItem>("title", "tags");
+constexpr auto def_type::struct_info<TaggedItem>() {
+    return def_type::field_info<TaggedItem>("title", "tags");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MaybeNickname>() {
-    return collab::model::field_info<MaybeNickname>("name", "nickname");
+constexpr auto def_type::struct_info<MaybeNickname>() {
+    return def_type::field_info<MaybeNickname>("name", "nickname");
 }
 
 template <>
-constexpr auto collab::model::struct_info<CliArgs>() {
-    return collab::model::field_info<CliArgs>("query", "verbose");
+constexpr auto def_type::struct_info<CliArgs>() {
+    return def_type::field_info<CliArgs>("query", "verbose");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MixedStruct>() {
-    return collab::model::field_info<MixedStruct>("visible", "internal_counter", "score");
+constexpr auto def_type::struct_info<MixedStruct>() {
+    return def_type::field_info<MixedStruct>("visible", "internal_counter", "score");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Team>() {
-    return collab::model::field_info<Team>("team_name", "members");
+constexpr auto def_type::struct_info<Team>() {
+    return def_type::field_info<Team>("team_name", "members");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Config>() {
-    return collab::model::field_info<Config>("name", "settings");
+constexpr auto def_type::struct_info<Config>() {
+    return def_type::field_info<Config>("name", "settings");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Labels>() {
-    return collab::model::field_info<Labels>("tags");
+constexpr auto def_type::struct_info<Labels>() {
+    return def_type::field_info<Labels>("tags");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Endpoint>() {
-    return collab::model::field_info<Endpoint>("url", "port");
+constexpr auto def_type::struct_info<Endpoint>() {
+    return def_type::field_info<Endpoint>("url", "port");
 }
 
 template <>
-constexpr auto collab::model::struct_info<ServiceMap>() {
-    return collab::model::field_info<ServiceMap>("services");
+constexpr auto def_type::struct_info<ServiceMap>() {
+    return def_type::field_info<ServiceMap>("services");
 }
 
 template <>
-constexpr auto collab::model::struct_info<EmptyConfig>() {
-    return collab::model::field_info<EmptyConfig>("settings");
+constexpr auto def_type::struct_info<EmptyConfig>() {
+    return def_type::field_info<EmptyConfig>("settings");
 }
 
 template <>
-constexpr auto collab::model::struct_info<TagSet>() {
-    return collab::model::field_info<TagSet>("tags");
+constexpr auto def_type::struct_info<TagSet>() {
+    return def_type::field_info<TagSet>("tags");
 }
 
 template <>
-constexpr auto collab::model::struct_info<IdSet>() {
-    return collab::model::field_info<IdSet>("ids");
+constexpr auto def_type::struct_info<IdSet>() {
+    return def_type::field_info<IdSet>("ids");
 }
 
 template <>
-constexpr auto collab::model::struct_info<DenseMapStruct>() {
-    return collab::model::field_info<DenseMapStruct>("scores");
+constexpr auto def_type::struct_info<DenseMapStruct>() {
+    return def_type::field_info<DenseMapStruct>("scores");
 }
 
 template <>
-constexpr auto collab::model::struct_info<DenseSetStruct>() {
-    return collab::model::field_info<DenseSetStruct>("names");
+constexpr auto def_type::struct_info<DenseSetStruct>() {
+    return def_type::field_info<DenseSetStruct>("names");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Measurement>() {
-    return collab::model::field_info<Measurement>("unit", "value");
+constexpr auto def_type::struct_info<Measurement>() {
+    return def_type::field_info<Measurement>("unit", "value");
 }
 
 template <>
-constexpr auto collab::model::struct_info<FloatStruct>() {
-    return collab::model::field_info<FloatStruct>("weight");
+constexpr auto def_type::struct_info<FloatStruct>() {
+    return def_type::field_info<FloatStruct>("weight");
 }
 
 template <>
-constexpr auto collab::model::struct_info<BigNumbers>() {
-    return collab::model::field_info<BigNumbers>("signed_big", "unsigned_big");
+constexpr auto def_type::struct_info<BigNumbers>() {
+    return def_type::field_info<BigNumbers>("signed_big", "unsigned_big");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Inner>() {
-    return collab::model::field_info<Inner>("x");
+constexpr auto def_type::struct_info<Inner>() {
+    return def_type::field_info<Inner>("x");
 }
 
 template <>
-constexpr auto collab::model::struct_info<Outer>() {
-    return collab::model::field_info<Outer>("name", "extra");
+constexpr auto def_type::struct_info<Outer>() {
+    return def_type::field_info<Outer>("name", "extra");
 }
 
 template <>
-constexpr auto collab::model::struct_info<EnumStruct>() {
-    return collab::model::field_info<EnumStruct>("method", "name");
+constexpr auto def_type::struct_info<EnumStruct>() {
+    return def_type::field_info<EnumStruct>("method", "name");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MultiEnumStruct>() {
-    return collab::model::field_info<MultiEnumStruct>("color", "method", "label");
+constexpr auto def_type::struct_info<MultiEnumStruct>() {
+    return def_type::field_info<MultiEnumStruct>("color", "method", "label");
 }
 
 template <>
-constexpr auto collab::model::struct_info<VecOfVecs>() {
-    return collab::model::field_info<VecOfVecs>("matrix");
+constexpr auto def_type::struct_info<VecOfVecs>() {
+    return def_type::field_info<VecOfVecs>("matrix");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MapOfVecs>() {
-    return collab::model::field_info<MapOfVecs>("grouped");
+constexpr auto def_type::struct_info<MapOfVecs>() {
+    return def_type::field_info<MapOfVecs>("grouped");
 }
 
 template <>
-constexpr auto collab::model::struct_info<VecOfMaps>() {
-    return collab::model::field_info<VecOfMaps>("records");
+constexpr auto def_type::struct_info<VecOfMaps>() {
+    return def_type::field_info<VecOfMaps>("records");
 }
 
 template <>
-constexpr auto collab::model::struct_info<OptionalVec>() {
-    return collab::model::field_info<OptionalVec>("maybe_tags");
+constexpr auto def_type::struct_info<OptionalVec>() {
+    return def_type::field_info<OptionalVec>("maybe_tags");
 }
 
 template <>
-constexpr auto collab::model::struct_info<VecOfOptionals>() {
-    return collab::model::field_info<VecOfOptionals>("scores");
+constexpr auto def_type::struct_info<VecOfOptionals>() {
+    return def_type::field_info<VecOfOptionals>("scores");
 }
 
 template <>
-constexpr auto collab::model::struct_info<DeepInner>() {
-    return collab::model::field_info<DeepInner>("value");
+constexpr auto def_type::struct_info<DeepInner>() {
+    return def_type::field_info<DeepInner>("value");
 }
 
 template <>
-constexpr auto collab::model::struct_info<DeepMiddle>() {
-    return collab::model::field_info<DeepMiddle>("label", "inner");
+constexpr auto def_type::struct_info<DeepMiddle>() {
+    return def_type::field_info<DeepMiddle>("label", "inner");
 }
 
 template <>
-constexpr auto collab::model::struct_info<DeepOuter>() {
-    return collab::model::field_info<DeepOuter>("name", "middle", "items");
+constexpr auto def_type::struct_info<DeepOuter>() {
+    return def_type::field_info<DeepOuter>("name", "middle", "items");
 }
 
 template <>
-constexpr auto collab::model::struct_info<DenseMapOfStructs>() {
-    return collab::model::field_info<DenseMapOfStructs>("locations");
+constexpr auto def_type::struct_info<DenseMapOfStructs>() {
+    return def_type::field_info<DenseMapOfStructs>("locations");
 }
 
 template <>
-constexpr auto collab::model::struct_info<PersonList>() {
-    return collab::model::field_info<PersonList>("org", "people");
+constexpr auto def_type::struct_info<PersonList>() {
+    return def_type::field_info<PersonList>("org", "people");
 }
 
 template <>
-constexpr auto collab::model::struct_info<VecOfEnums>() {
-    return collab::model::field_info<VecOfEnums>("methods");
+constexpr auto def_type::struct_info<VecOfEnums>() {
+    return def_type::field_info<VecOfEnums>("methods");
 }
 
 template <>
-constexpr auto collab::model::struct_info<MapOfEnums>() {
-    return collab::model::field_info<MapOfEnums>("palette");
+constexpr auto def_type::struct_info<MapOfEnums>() {
+    return def_type::field_info<MapOfEnums>("palette");
 }
 
 template <>
-constexpr auto collab::model::struct_info<HJsonDog>() {
-    return collab::model::field_info<HJsonDog>("endpoint", "help", "name", "age", "breed");
+constexpr auto def_type::struct_info<HJsonDog>() {
+    return def_type::field_info<HJsonDog>("endpoint", "help", "name", "age", "breed");
 }
 
 template <>
-constexpr auto collab::model::struct_info<HJsonMixed>() {
-    return collab::model::field_info<HJsonMixed>("help", "label", "counter", "score");
+constexpr auto def_type::struct_info<HJsonMixed>() {
+    return def_type::field_info<HJsonMixed>("help", "label", "counter", "score");
 }
 
 template <>
-constexpr auto collab::model::struct_info<HJsonMetaOnly>() {
-    return collab::model::field_info<HJsonMetaOnly>("endpoint", "help");
+constexpr auto def_type::struct_info<HJsonMetaOnly>() {
+    return def_type::field_info<HJsonMetaOnly>("endpoint", "help");
 }
 #endif
 

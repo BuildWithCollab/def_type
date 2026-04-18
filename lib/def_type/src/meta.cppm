@@ -2,9 +2,9 @@ module;
 
 #include <type_traits>
 
-export module collab.core:meta;
+export module def_type:meta;
 
-export namespace collab::model {
+export namespace def_type {
 
 // ── meta<T> — type-level metadata wrapper ────────────────────────────────
 //
@@ -67,4 +67,4 @@ namespace detail {
 
 }  // namespace detail
 
-}  // namespace collab::model
+}  // namespace def_type

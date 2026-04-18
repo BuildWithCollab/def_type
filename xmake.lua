@@ -46,4 +46,4 @@ if get_config("build_tests") then
     add_requires("catch2")
 end
 
-includes("lib/type_def/xmake.lua")
+includes("lib/def_type/xmake.lua")

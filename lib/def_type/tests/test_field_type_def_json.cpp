@@ -20,8 +20,8 @@ struct ReflectedContainer {
 
 #ifndef COLLAB_FIELD_HAS_PFR
 template <>
-constexpr auto collab::model::struct_info<ReflectedContainer>() {
-    return collab::model::field_info<ReflectedContainer>("name", "details");
+constexpr auto def_type::struct_info<ReflectedContainer>() {
+    return def_type::field_info<ReflectedContainer>("name", "details");
 }
 #endif
 

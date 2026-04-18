@@ -23,13 +23,13 @@ module;
 #include <unordered_map>
 #include <unordered_set>
 
-export module collab.core:type_def;
+export module def_type:type_def;
 
 import :field;
 import :field_reflect;
 import :meta;
 
-export namespace collab::model {
+export namespace def_type {
 
 // ═══════════════════════════════════════════════════════════════════════
 // Validation types
@@ -156,7 +156,7 @@ namespace detail {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Built-in validators (collab::model::validations)
+// Built-in validators (def_type::validations)
 // ═══════════════════════════════════════════════════════════════════════
 
 namespace validations {
@@ -247,25 +247,25 @@ namespace detail {
     template <typename T, typename M, std::size_t... Is>
     consteval std::size_t count_meta_of_impl(std::index_sequence<Is...>) {
         return (0 + ... + (is_meta_of_v<
-            std::remove_cvref_t<collab::model::detail::member_type<Is, T>>, M> ? 1 : 0));
+            std::remove_cvref_t<def_type::detail::member_type<Is, T>>, M> ? 1 : 0));
     }
 
     template <typename T, typename M>
     consteval std::size_t count_meta_of() {
-        constexpr auto N = collab::model::detail::dispatch_field_count<T>();
+        constexpr auto N = def_type::detail::dispatch_field_count<T>();
         return count_meta_of_impl<T, M>(std::make_index_sequence<N>{});
     }
 
     // Count all meta<> members (any type)
     template <typename T, std::size_t... Is>
     consteval std::size_t count_all_metas_impl(std::index_sequence<Is...>) {
-        return (0 + ... + (collab::model::is_meta<
-            collab::model::detail::member_type<Is, T>> ? 1 : 0));
+        return (0 + ... + (def_type::is_meta<
+            def_type::detail::member_type<Is, T>> ? 1 : 0));
     }
 
     template <typename T>
     consteval std::size_t count_all_metas() {
-        constexpr auto N = collab::model::detail::dispatch_field_count<T>();
+        constexpr auto N = def_type::detail::dispatch_field_count<T>();
         return count_all_metas_impl<T>(std::make_index_sequence<N>{});
     }
 
@@ -275,9 +275,9 @@ namespace detail {
     constexpr void try_extract_meta(Obj& obj, M& result, bool& found) {
         if (found) return;
         using T = std::remove_cvref_t<Obj>;
-        using member_t = std::remove_cvref_t<collab::model::detail::member_type<I, T>>;
+        using member_t = std::remove_cvref_t<def_type::detail::member_type<I, T>>;
         if constexpr (is_meta_of_v<member_t, M>) {
-            result = collab::model::detail::dispatch_get_member<I>(obj).value;
+            result = def_type::detail::dispatch_get_member<I>(obj).value;
             found = true;
         }
     }
@@ -295,10 +295,10 @@ namespace detail {
         std::vector<M> results;
         auto collect = [&]<std::size_t I>(std::integral_constant<std::size_t, I>) {
             using T = std::remove_cvref_t<Obj>;
-            using member_t = std::remove_cvref_t<collab::model::detail::member_type<I, T>>;
+            using member_t = std::remove_cvref_t<def_type::detail::member_type<I, T>>;
             if constexpr (is_meta_of_v<member_t, M>) {
                 results.push_back(
-                    collab::model::detail::dispatch_get_member<I>(obj).value);
+                    def_type::detail::dispatch_get_member<I>(obj).value);
             }
         };
         (collect(std::integral_constant<std::size_t, Is>{}), ...);
@@ -310,10 +310,10 @@ namespace detail {
     template <std::size_t I, typename Obj, typename F>
     constexpr void visit_field_value(Obj& obj, F&& fn) {
         using T = std::remove_cvref_t<Obj>;
-        using member_t = collab::model::detail::member_type<I, T>;
-        if constexpr (collab::model::is_field<member_t>) {
-            auto& member = collab::model::detail::dispatch_get_member<I>(obj);
-            fn(collab::model::detail::dispatch_field_name_rt<I, T>(), member.value);
+        using member_t = def_type::detail::member_type<I, T>;
+        if constexpr (def_type::is_field<member_t>) {
+            auto& member = def_type::detail::dispatch_get_member<I>(obj);
+            fn(def_type::detail::dispatch_field_name_rt<I, T>(), member.value);
         }
     }
 
@@ -327,10 +327,10 @@ namespace detail {
     template <std::size_t I, typename Obj, typename F>
     constexpr void visit_raw_field(Obj& obj, F&& fn) {
         using T = std::remove_cvref_t<Obj>;
-        using member_t = collab::model::detail::member_type<I, T>;
-        if constexpr (collab::model::is_field<member_t>) {
-            auto& member = collab::model::detail::dispatch_get_member<I>(obj);
-            fn(collab::model::detail::dispatch_field_name_rt<I, T>(), member);
+        using member_t = def_type::detail::member_type<I, T>;
+        if constexpr (def_type::is_field<member_t>) {
+            auto& member = def_type::detail::dispatch_get_member<I>(obj);
+            fn(def_type::detail::dispatch_field_name_rt<I, T>(), member);
         }
     }
 
@@ -343,9 +343,9 @@ namespace detail {
 
     template <typename T, std::size_t I, typename F>
     constexpr void visit_field_descriptor(F&& fn) {
-        using member_t = collab::model::detail::member_type<I, T>;
-        if constexpr (collab::model::is_field<member_t>) {
-            fn(collab::model::field_descriptor<T, I>{});
+        using member_t = def_type::detail::member_type<I, T>;
+        if constexpr (def_type::is_field<member_t>) {
+            fn(def_type::field_descriptor<T, I>{});
         }
     }
 
@@ -359,9 +359,9 @@ namespace detail {
     template <std::size_t I, typename Obj, typename F>
     constexpr void visit_meta_value(Obj& obj, F&& fn) {
         using T = std::remove_cvref_t<Obj>;
-        using member_t = std::remove_cvref_t<collab::model::detail::member_type<I, T>>;
-        if constexpr (collab::model::is_meta<member_t>) {
-            fn(collab::model::detail::dispatch_get_member<I>(obj).value);
+        using member_t = std::remove_cvref_t<def_type::detail::member_type<I, T>>;
+        if constexpr (def_type::is_meta<member_t>) {
+            fn(def_type::detail::dispatch_get_member<I>(obj).value);
         }
     }
 
@@ -376,11 +376,11 @@ namespace detail {
     constexpr void try_get_field(Obj& obj, std::string_view name, F&& fn, bool& found) {
         if (found) return;
         using T = std::remove_cvref_t<Obj>;
-        using member_t = collab::model::detail::member_type<I, T>;
+        using member_t = def_type::detail::member_type<I, T>;
         // field_indices_ guarantees only field<> member indices arrive here
-        auto& member = collab::model::detail::dispatch_get_member<I>(obj);
-        if (collab::model::detail::dispatch_field_name_rt<I, T>() == name) {
-            fn(collab::model::detail::dispatch_field_name_rt<I, T>(), member.value);
+        auto& member = def_type::detail::dispatch_get_member<I>(obj);
+        if (def_type::detail::dispatch_field_name_rt<I, T>() == name) {
+            fn(def_type::detail::dispatch_field_name_rt<I, T>(), member.value);
             found = true;
         }
     }
@@ -400,13 +400,13 @@ namespace detail {
                                  bool& set_ok, bool& name_matched) {
         if (set_ok) return;
         using T = std::remove_cvref_t<Obj>;
-        using member_t = collab::model::detail::member_type<I, T>;
+        using member_t = def_type::detail::member_type<I, T>;
         // field_indices_ guarantees only field<> member indices arrive here
-        if (collab::model::detail::dispatch_field_name_rt<I, T>() == name) {
+        if (def_type::detail::dispatch_field_name_rt<I, T>() == name) {
             name_matched = true;
             using value_t = typename member_t::value_type;
             if constexpr (std::is_constructible_v<value_t, V>) {
-                collab::model::detail::dispatch_get_member<I>(obj).value =
+                def_type::detail::dispatch_get_member<I>(obj).value =
                     std::forward<V>(val);
                 set_ok = true;
             }
@@ -554,16 +554,16 @@ namespace detail {
     void try_build_discovered_field_def(
             dynamic_field_def& out, std::string_view target, bool& found) {
         if (found) return;
-        using member_t = collab::model::detail::member_type<I, TT>;
-        if constexpr (collab::model::is_field<member_t>) {
-            if (collab::model::detail::dispatch_field_name_rt<I, TT>() == target) {
+        using member_t = def_type::detail::member_type<I, TT>;
+        if constexpr (def_type::is_field<member_t>) {
+            if (def_type::detail::dispatch_field_name_rt<I, TT>() == target) {
                 out.name = std::string(target);
                 out.type = typeid(typename member_t::value_type);
                 out.has_default = false;
                 out.metas.clear();
                 TT instance{};
                 extract_with_metas(out.metas,
-                    collab::model::detail::dispatch_get_member<I>(instance).with);
+                    def_type::detail::dispatch_get_member<I>(instance).with);
                 found = true;
             }
         }
@@ -739,14 +739,14 @@ auto make_filtered_sequence(std::index_sequence<AllIs...>) {
 }
 
 template <std::size_t I, typename T>
-struct is_field_at : std::bool_constant<collab::model::is_field<
-    collab::model::detail::member_type<I, T>>> {};
+struct is_field_at : std::bool_constant<def_type::is_field<
+    def_type::detail::member_type<I, T>>> {};
 
 }  // namespace detail
 
 template <typename T = detail::dynamic_tag, typename... Regs>
 class type_def {
-    static constexpr auto total_members_ = collab::model::detail::dispatch_field_count<T>();
+    static constexpr auto total_members_ = def_type::detail::dispatch_field_count<T>();
     using indices_ = std::make_index_sequence<total_members_>;
     using field_indices_ = decltype(detail::make_filtered_sequence<T, detail::is_field_at>(indices_{}));
 
@@ -767,17 +767,17 @@ public:
     // ── Type name ────────────────────────────────────────────────────
 
     constexpr std::string_view name() const {
-        return collab::model::detail::type_name<T>();
+        return def_type::detail::type_name<T>();
     }
 
     // ── Field queries ────────────────────────────────────────────────
 
     std::size_t field_count() const {
-        return collab::model::detail::field_count<T>() + sizeof...(Regs);
+        return def_type::detail::field_count<T>() + sizeof...(Regs);
     }
 
     std::vector<std::string> field_names() const {
-        auto discovered = collab::model::detail::field_names<T>();
+        auto discovered = def_type::detail::field_names<T>();
         std::vector<std::string> result(discovered.begin(), discovered.end());
         std::apply([&](const auto&... regs) {
             (result.push_back(regs.name), ...);
@@ -803,7 +803,7 @@ public:
     // ── Field queries by name ────────────────────────────────────────
 
     bool has_field(std::string_view fname) const {
-        auto discovered = collab::model::detail::field_names<T>();
+        auto discovered = def_type::detail::field_names<T>();
         for (auto& n : discovered)
             if (n == fname) return true;
         bool found = false;
@@ -1623,4 +1623,4 @@ struct field<type_def<detail::dynamic_tag>, WithPack> {
     operator const type_instance&() const { return value; }
 };
 
-}  // namespace collab::model
+}  // namespace def_type
