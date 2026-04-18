@@ -15,7 +15,7 @@ struct FieldTypeDefContainer {
     field<type_def<>>   details {field_typedef_details};
 };
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<FieldTypeDefContainer>() {
     return def_type::field_info<FieldTypeDefContainer>("name", "details");

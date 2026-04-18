@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-import def_type;
+#include <def_type/def_type.hpp>
 
 using namespace def_type;
 
@@ -21,7 +21,7 @@ struct PlainCat {
     int         age = 0;
 };
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<SchemaTestDog>() {
     return def_type::field_info<SchemaTestDog>("name", "age");

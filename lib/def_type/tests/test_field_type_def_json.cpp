@@ -18,7 +18,7 @@ struct ReflectedContainer {
     field<type_def<>>   details {reflected_details_type};
 };
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<ReflectedContainer>() {
     return def_type::field_info<ReflectedContainer>("name", "details");

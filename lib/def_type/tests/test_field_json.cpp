@@ -14,7 +14,7 @@
 #include <unordered_set>
 #include <vector>
 
-import def_type;
+#include <def_type/def_type.hpp>
 
 using namespace def_type;
 using json = nlohmann::json;
@@ -45,7 +45,7 @@ struct BigNumbers;
 struct Inner;
 struct Outer;
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<SimpleArgs>() {
     return def_type::field_info<SimpleArgs>("name", "age", "active");

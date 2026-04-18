@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <vector>
 
-import def_type;
+#include <def_type/def_type.hpp>
 
 using namespace def_type;
 
@@ -33,7 +33,7 @@ struct OnlyFields;
 struct MixedStruct;
 struct LoginResponse;
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<WeatherArgs>() {
     return def_type::field_info<WeatherArgs>("city", "days", "verbose", "tags");
@@ -263,7 +263,7 @@ TEST_CASE("reflected_struct rejects non-qualifying types", "[field][concept]") {
     STATIC_REQUIRE(!detail::reflected_struct<int>);
     STATIC_REQUIRE(!detail::reflected_struct<NonAggregate>);
 
-#ifdef COLLAB_FIELD_HAS_PFR
+#ifdef DEF_TYPE_HAS_PFR
     // EmptyStruct and NoFieldsOnlyPlain are aggregates with no field<>
     // members. Without PFR, evaluating dispatch_field_count on an
     // unregistered type hits a static_assert — these checks are only

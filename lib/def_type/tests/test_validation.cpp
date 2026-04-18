@@ -5,7 +5,7 @@
 
 #include <string>
 
-import def_type;
+#include <def_type/def_type.hpp>
 
 using namespace def_type;
 using namespace def_type::validations;
@@ -532,7 +532,7 @@ struct ValidatedDog;
 struct ParseableDog;
 struct HybridValidatedDog;
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<ValidatedDog>() {
     return def_type::field_info<ValidatedDog>("name", "age", "breed");
@@ -1007,7 +1007,7 @@ struct ValidatedPerson {
     field<ValidatedAddress> address;
 };
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<ValidatedAddress>() {
     return def_type::field_info<ValidatedAddress>("street", "zip");
@@ -1144,7 +1144,7 @@ struct ValidatedRoot {
     field<ValidatedMiddle> middle;
 };
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<ValidatedLeaf>() {
     return def_type::field_info<ValidatedLeaf>("tag");
@@ -1427,7 +1427,7 @@ struct TypedMixedDog {
     field<std::string> breed;
 };
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<TypedMixedDog>() {
     return def_type::field_info<TypedMixedDog>("name", "age", "breed");

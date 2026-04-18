@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <vector>
 
-import def_type;
+#include <def_type/def_type.hpp>
 
 using namespace def_type;
 
@@ -135,7 +135,7 @@ struct MultiTagDog {
 // struct_info fallbacks (non-PFR builds)
 // ═════════════════════════════════════════════════════════════════════════
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<SimpleArgs>() {
     return def_type::field_info<SimpleArgs>("name", "age", "active");

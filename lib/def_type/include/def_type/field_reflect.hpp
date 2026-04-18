@@ -1,4 +1,4 @@
-module;
+#pragma once
 
 #include <array>
 #include <cstddef>
@@ -7,19 +7,17 @@ module;
 #include <type_traits>
 #include <utility>
 
-#ifdef COLLAB_FIELD_HAS_PFR
+#ifdef DEF_TYPE_HAS_PFR
 #include <pfr.hpp>
 #endif
 
-export module def_type:field_reflect;
-
-import :field;
+#include <def_type/field.hpp>
 
 // ════════════════════════════════════════════════════════════════════════════
-// Section 1 — PFR backend (opt-in via COLLAB_FIELD_HAS_PFR)
+// Section 1 — PFR backend (opt-in via DEF_TYPE_HAS_PFR)
 // ════════════════════════════════════════════════════════════════════════════
 
-#ifdef COLLAB_FIELD_HAS_PFR
+#ifdef DEF_TYPE_HAS_PFR
 
 namespace def_type::pfr_impl {
 
@@ -305,7 +303,7 @@ constexpr void for_each_member(T& obj, F&& fn) {
 // Section 3 — Exported API (dispatch logic, reflection, concepts, helpers)
 // ════════════════════════════════════════════════════════════════════════════
 
-export namespace def_type {
+namespace def_type {
 
 // ── type_name<T>() ──────────────────────────────────────────────────────
 
@@ -350,7 +348,7 @@ namespace detail {
 
 namespace detail {
 
-#ifdef COLLAB_FIELD_HAS_PFR
+#ifdef DEF_TYPE_HAS_PFR
 inline constexpr bool has_pfr_backend = true;
 #else
 inline constexpr bool has_pfr_backend = false;
@@ -405,7 +403,7 @@ inline constexpr bool has_pfr_backend = false;
         }
     };
 
-#ifdef COLLAB_FIELD_HAS_PFR
+#ifdef DEF_TYPE_HAS_PFR
     template <>
     struct fallback<true> {
         template <typename T>

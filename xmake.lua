@@ -7,7 +7,6 @@ add_rules("mode.release")
 set_defaultmode("release")
 
 set_languages("c++23")
-set_policy("build.c++.modules", true)
 
 add_repositories("BuildWithCollab https://github.com/BuildWithCollab/Packages.git")
 
@@ -17,14 +16,9 @@ end
 
 add_requires("fmt")
 add_requires("unordered_dense")
--- magic_enum v0.9.7 has a static_str→string_view implicit conversion
--- that MSVC rejects inside C++ module partitions (commit 7d87efb)
-add_requires("magic_enum master")
-add_requires("nameof-module-support")
-
--- nlohmann_json fork with C++20 module support + MSVC friend decl fix
--- (fixes nlohmann/json#4529 — :: prefix in friend declarations breaks modules)
-add_requires("nlohmann_json-module-support")
+add_requires("magic_enum")
+add_requires("nameof")
+add_requires("nlohmann_json")
 
 option("build_tests")
     set_default(true)

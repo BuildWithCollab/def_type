@@ -26,7 +26,7 @@ struct HybridPoint {
 
 // ── struct_info fallbacks (non-PFR builds) ──────────────────────────────
 
-#ifndef COLLAB_FIELD_HAS_PFR
+#ifndef DEF_TYPE_HAS_PFR
 template <>
 constexpr auto def_type::struct_info<HybridDog>() {
     return def_type::field_info<HybridDog>("name", "age", "breed");

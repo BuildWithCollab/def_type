@@ -4,7 +4,7 @@
 #include <string_view>
 #include <type_traits>
 
-import def_type;
+#include <def_type/def_type.hpp>
 
 using namespace def_type;
 

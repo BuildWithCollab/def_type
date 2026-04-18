@@ -1,10 +1,8 @@
-module;
+#pragma once
 
 #include <type_traits>
 
-export module def_type:meta;
-
-export namespace def_type {
+namespace def_type {
 
 // ── meta<T> — type-level metadata wrapper ────────────────────────────────
 //

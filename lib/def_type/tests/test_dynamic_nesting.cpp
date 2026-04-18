@@ -4,7 +4,7 @@
 
 #include <string>
 
-import def_type;
+#include <def_type/def_type.hpp>
 
 using namespace def_type;
 using json = nlohmann::json;

@@ -1,4 +1,4 @@
-module;
+#pragma once
 
 #include <any>
 #include <cstddef>
@@ -23,19 +23,17 @@ module;
 #include <unordered_map>
 #include <unordered_set>
 
-export module def_type:type_def;
+#include <def_type/field.hpp>
+#include <def_type/field_reflect.hpp>
+#include <def_type/meta.hpp>
 
-import :field;
-import :field_reflect;
-import :meta;
-
-export namespace def_type {
+namespace def_type {
 
 // ═══════════════════════════════════════════════════════════════════════
 // Validation types
 // ═══════════════════════════════════════════════════════════════════════
 //
-// validation_error and validator_pack are defined in field.cppm.
+// validation_error and validator_pack are defined in field.hpp.
 // validation_result and parse_result live here.
 
 struct validation_result {
@@ -137,7 +135,7 @@ private:
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// Validator infrastructure (continued from field.cppm)
+// Validator infrastructure (continued from field.hpp)
 // ═══════════════════════════════════════════════════════════════════════
 
 namespace detail {
@@ -420,11 +418,11 @@ namespace detail {
         (try_set_field<Is>(obj, name, std::forward<V>(val), set_ok, name_matched), ...);
     }
 
-    // ── JSON codec initializer — forward-declared, defined in :field_json
+    // ── JSON codec initializer — forward-declared, defined in field_json.hpp
     //
     // .field<V>() stores a function pointer to this template. The pointer
     // is NOT called at registration time — only when to_json()/load_json()
-    // is first invoked, from field_json.cpp where json.hpp is available.
+    // is first invoked, from field_json.hpp where json.hpp is available.
 
     struct dynamic_field_def;
 
@@ -453,7 +451,7 @@ namespace detail {
         // JSON codec — lazily initialized. _json_init stores a function
         // that calls init_json_codec<V> to populate to_json_fn/from_json_fn.
         // The std::function wraps a generic lambda whose body is NOT
-        // instantiated until called (from field_json.cpp).
+        // instantiated until called (from field_json.hpp).
         // Mutable so lazy init works even on const type_def instances.
         mutable std::function<void(const dynamic_field_def&)> _json_init;
         mutable std::function<std::any(const std::any&)>        to_json_fn;
@@ -475,7 +473,7 @@ namespace detail {
 
     // ── Build type-erased validate_fn from a validator_pack ──────────
     //
-    // extract_short_validator_name is defined in field.cppm.
+    // extract_short_validator_name is defined in field.hpp.
 
     template <typename FieldType, typename... Validators>
     auto make_validate_fn(const validator_pack<Validators...>& pack) {
@@ -1309,9 +1307,8 @@ public:
     //
     // .field("address", address_type) — nests a dynamic type_def.
     // The field stores type_instance values backed by nested_type.
-    // Defined in field_json.cpp because it needs type_instance to be complete.
 
-    type_def& field(std::string_view fname,
+    inline type_def& field(std::string_view fname,
                     const type_def& nested_type);
 
     // ── Meta builder (type-level) ────────────────────────────────────
@@ -1394,17 +1391,13 @@ public:
     type_instance create() const;
 
     // ── Create instance from JSON ────────────────────────────────────
-    // Defined in field_json.cpp (module implementation unit).
 
-    type_instance create(const nlohmann::json& j) const;
+    inline type_instance create(const nlohmann::json& j) const;
 
     // ── Parse JSON with reporting ───────────────────────────────────
-    // Returns parse_result<type_instance> — always contains the object
-    // plus extra_keys, missing_fields, and validation_errors.
-    // Defined in field_json.cpp (module implementation unit).
 
-    parse_result<type_instance> parse(const nlohmann::json& j) const;
-    parse_result<type_instance> parse(const nlohmann::json& j, parse_options options) const;
+    inline parse_result<type_instance> parse(const nlohmann::json& j) const;
+    inline parse_result<type_instance> parse(const nlohmann::json& j, parse_options options) const;
 };
 
 // ── CTAD: type_def("Event") deduces to type_def<detail::dynamic_tag> ─────────────
@@ -1569,16 +1562,13 @@ public:
     //
     // Overlay semantics: missing keys keep their current/default values.
     // Extra JSON keys are silently ignored. Type mismatches throw.
-    // Defined in field_json.cpp (module implementation unit).
 
-    void load_json(const nlohmann::json& j);
+    inline void load_json(const nlohmann::json& j);
 
     // ── JSON serialization ───────────────────────────────────────────
-    //
-    // Defined in field_json.cpp (module implementation unit).
 
-    nlohmann::json to_json() const;
-    std::string to_json_string(int indent = -1) const;
+    inline nlohmann::json to_json() const;
+    inline std::string to_json_string(int indent = -1) const;
 };
 
 // ── type_def<detail::dynamic_tag>::create() ──────────────────────────────────────

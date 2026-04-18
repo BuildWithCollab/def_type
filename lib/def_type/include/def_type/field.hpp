@@ -1,4 +1,4 @@
-module;
+#pragma once
 
 #include <array>
 #include <cstddef>
@@ -14,9 +14,7 @@ module;
 
 #include <nameof.hpp>
 
-export module def_type:field;
-
-export namespace def_type {
+namespace def_type {
 
 // ── validation_error — shared across all paths ──────────────────────────
 
