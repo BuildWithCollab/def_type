@@ -853,20 +853,10 @@ struct starts_with_uppercase {
     }
 };
 
-struct in_range {
-    int minimum;
-    int maximum;
-    std::optional<std::string> operator()(int value) const {
-        if (value >= minimum && value <= maximum)
-            return std::nullopt;
-        return std::format("{} must be between {} and {}", value, minimum, maximum);
-    }
-};
-
 // Use them just like built-in validators:
 auto t = type_def("Dog")
     .field<std::string>("name", validators(not_empty{}, starts_with_uppercase{}))
-    .field<int>("age", validators(in_range{.minimum = 0, .maximum = 30}));
+    .field<int>("age", validators(in_range{.min = 0, .max = 25}));
 ```
 
 ### valid() — Quick Check
