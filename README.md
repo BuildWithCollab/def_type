@@ -17,7 +17,6 @@ Every framework solves this differently — Unreal has `UPROPERTY()` macros, Qt 
 ```cpp
 #include <def_type.hpp>
 using namespace def_type;
-using namespace def_type::validations;
 ```
 
 ### The Typed Path — Let Your Struct Be the Schema
@@ -763,7 +762,11 @@ person_schema.field("address").has_meta<help_info>();   // true
 
 ### Built-in Validators
 
-def_type ships with validators in the `def_type::validations` namespace:
+def_type ships with a few validators in the `def_type::validations` namespace. These are convenience validators — you'll likely write your own for anything domain-specific (see [Custom Validators](#custom-validators) below).
+
+```cpp
+using namespace def_type::validations;
+```
 
 | Validator | Applies to | Fails when |
 |-----------|-----------|------------|
@@ -774,7 +777,6 @@ def_type ships with validators in the `def_type::validations` namespace:
 Combine validators with `validators(...)`:
 
 ```cpp
-using namespace def_type::validations;
 
 // Dynamic
 auto t = type_def("Config")
@@ -813,7 +815,12 @@ auto t = type_def("Dog")
 
 ### Custom Validators
 
-Any callable with signature `(const T&) -> std::optional<std::string>` is a validator. Return `std::nullopt` for valid, or a message for invalid:
+Writing your own validator is trivial — it's just a struct with `operator()`. The contract:
+
+- Takes `const T&` (the field value)
+- Returns `std::optional<std::string>` — `std::nullopt` means valid, a string means invalid (the string is the error message)
+
+That's it. No base class, no registration, no macros:
 
 ```cpp
 struct starts_with_uppercase {
