@@ -4,6 +4,62 @@
 
 Define a type once — with fields, metadata, defaults, and constraints — and get reflection, serialization, validation, and schema queries for free. No macros. No code generation. Just C++23.
 
+## Table of Contents
+
+- [The Problem](#the-problem)
+- [Quick Start](#quick-start)
+  - [Let Your Struct Be the Schema](#let-your-struct-be-the-schema)
+  - [The Dynamic Path — No Struct Required](#the-dynamic-path--no-struct-required)
+  - [The Hybrid Path — Plain Structs, Registered Fields](#the-hybrid-path--plain-structs-registered-fields)
+  - [One Concept to Rule Them All](#one-concept-to-rule-them-all)
+- [Fields](#fields)
+  - [`field<T>` — The Transparent Value Wrapper](#fieldt--the-transparent-value-wrapper)
+  - [Supported Field Types](#supported-field-types)
+  - [Field-Level Metadata with `with<>`](#field-level-metadata-with-with)
+- [Type-Level Metadata with `meta<T>`](#type-level-metadata-with-metat)
+- [Querying the Schema](#querying-the-schema)
+  - [Field Descriptors (`field_def`)](#field-descriptors-field_def)
+- [Working with Data](#working-with-data)
+  - [set() and get()](#set-and-get)
+  - [Callback-Style get()](#callback-style-get)
+  - [Error Handling](#error-handling)
+- [Iteration](#iteration)
+  - [Iterating Fields with Values](#iterating-fields-with-values)
+  - [Iterating Field Descriptors (Schema Only)](#iterating-field-descriptors-schema-only)
+  - [Iterating Type-Level Metas](#iterating-type-level-metas)
+- [JSON Serialization](#json-serialization)
+  - [to_json — Struct to JSON](#to_json--struct-to-json)
+  - [from_json — JSON to Struct](#from_json--json-to-struct)
+  - [Complex Types in JSON](#complex-types-in-json)
+  - [Nested Structs in JSON](#nested-structs-in-json)
+- [Dynamic Nesting](#dynamic-nesting)
+  - [Nested JSON — Dynamic](#nested-json--dynamic)
+  - [3-Level Deep Nesting](#3-level-deep-nesting)
+- [Hybrid Nested Schemas](#hybrid-nested-schemas)
+- [Validation](#validation)
+  - [Built-in Validators](#built-in-validators)
+  - [Dynamic — Validators Without Default Value](#dynamic--validators-without-default-value)
+  - [Custom Validators](#custom-validators)
+  - [valid() — Quick Check](#valid--quick-check)
+  - [validate() — Detailed Errors](#validate--detailed-errors)
+  - [Validators Don't Block Other Operations](#validators-dont-block-other-operations)
+  - [Validators Mixed with Metas](#validators-mixed-with-metas)
+  - [Nested Validation](#nested-validation)
+- [Parse — JSON with Reporting](#parse--json-with-reporting)
+  - [parse_result\<T\>](#parse_resultt)
+  - [Value Access on parse_result](#value-access-on-parse_result)
+  - [parse_options — Configurable Strictness](#parse_options--configurable-strictness)
+  - [parse_error — Structured Exception](#parse_error--structured-exception)
+  - [Type Mismatch Handling in Parse](#type-mismatch-handling-in-parse)
+  - [Parse on All Three Paths](#parse-on-all-three-paths)
+- [PFR vs Manual Registration](#pfr-vs-manual-registration)
+- [type_instance — Dynamic Runtime Objects](#type_instance--dynamic-runtime-objects)
+- [Safety](#safety)
+- [Dependencies](#dependencies)
+- [Building](#building)
+
+---
+
 ## The Problem
 
 C++ gives you structs. Structs are great for holding data, but they don't *know* anything about themselves. Want to iterate over fields? Write it by hand. Want to serialize to JSON? Write a custom function. Want to attach metadata like "this field has a CLI short flag"? There's no standard way.
