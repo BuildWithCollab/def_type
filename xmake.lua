@@ -33,7 +33,7 @@ option("enable_pfr")
 option_end()
 
 if get_config("enable_pfr") then
-    add_requires("boost_pfr")
+    add_requires("pfr_non_boost")
 end
 
 if get_config("build_tests") then

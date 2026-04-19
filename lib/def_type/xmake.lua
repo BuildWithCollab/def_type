@@ -9,7 +9,7 @@ target("def_type")
     add_packages("nameof", { public = true })
 
     if get_config("enable_pfr") then
-        add_packages("boost_pfr", { public = true })
+        add_packages("pfr_non_boost", { public = true })
         add_defines("DEF_TYPE_HAS_PFR", { public = true })
     end
 
