@@ -15,7 +15,7 @@ Every framework solves this differently — Unreal has `UPROPERTY()` macros, Qt 
 ## Quick Start
 
 ```cpp
-#include <def_type/def_type.hpp>
+#include <def_type.hpp>
 using namespace def_type;
 using namespace def_type::validations;
 ```
