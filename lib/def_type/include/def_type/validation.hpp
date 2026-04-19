@@ -42,11 +42,13 @@ namespace validations {
         }
     };
 
-    struct positive {
-        template <typename T>
-        std::optional<std::string> operator()(const T& value) const {
-            if (value > 0) return std::nullopt;
-            return std::to_string(value) + " must be positive";
+    struct in_range {
+        int min = 0;
+        int max = 0;
+        std::optional<std::string> operator()(int value) const {
+            if (value >= min && value <= max) return std::nullopt;
+            return std::to_string(value) + " must be between " +
+                   std::to_string(min) + " and " + std::to_string(max);
         }
     };
 

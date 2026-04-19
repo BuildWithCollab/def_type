@@ -19,25 +19,53 @@ Every framework solves this differently — Unreal has `UPROPERTY()` macros, Qt 
 using namespace def_type;
 ```
 
-### The Typed Path — Let Your Struct Be the Schema
+### Let Your Struct Be the Schema
 
 ```cpp
+struct cli_info {
+    const char* help = "";
+};
+
 struct Dog {
     meta<endpoint_info> endpoint{{.path = "/dogs", .method = "POST"}};
-    meta<help_info>     help{{.summary = "A good boy"}};
 
     field<std::string>  name;
-    field<int>          age;
-    field<std::string>  breed;
+    field<std::string, with<cli_info>>  breed {
+        .with = {{.help = "Name of the dog breed"}}
+    };
+    field<int>          age {
+        .value = 0,
+        .validators = validators(in_range{.min = 0, .max = 25})
+    };
 };
 
 // That's it. The type definition IS the struct.
 type_def<Dog> t;
 
-t.name();          // "Dog"
-t.field_count();   // 3
-t.field_names();   // ["name", "age", "breed"]
-t.has_meta<endpoint_info>(); // true
+t.name();                        // "Dog"
+t.field_count();                  // 3
+t.field_names();                  // ["name", "breed", "age"]
+t.has_meta<endpoint_info>();      // true
+t.meta<endpoint_info>().path;     // "/dogs"
+
+// Field-level metadata
+t.field("breed").has_meta<cli_info>();          // true
+t.field("breed").meta<cli_info>().help;         // "Name of the dog breed"
+
+// Validation
+Dog rex;
+rex.name = "Rex";
+rex.breed = "Husky";
+rex.age = 3;
+
+t.valid(rex);                     // true — age is in range [0, 25]
+
+rex.age = -1;
+t.valid(rex);                     // false
+
+auto result = t.validate(rex);
+result.errors()[0].path;          // "age"
+result.errors()[0].constraint;    // "in_range"
 ```
 
 `field<T>` is a transparent wrapper — it *is* the value. Implicit conversion, `operator->`, aggregate initialization. Your struct stays an aggregate:
@@ -50,7 +78,7 @@ std::string name_copy = rex.name;   // just works — implicit conversion back
 rex.name->size();            // operator-> passes through to std::string
 ```
 
-But now `type_def<Dog>` can iterate fields, query metadata, set/get by name:
+`type_def<Dog>` can iterate fields, query metadata, set/get by name:
 
 ```cpp
 Dog rex = t.create();
@@ -62,15 +90,9 @@ t.set(rex, "breed", std::string("Husky"));
 t.get<std::string>(rex, "name");   // "Rex"
 t.get<int>(rex, "age");            // 3
 
-t.has_field("name");               // true
-t.has_field("nope");               // false
-
-auto endpoint = t.meta<endpoint_info>();
-// endpoint.path == "/dogs", endpoint.method == "POST"
-
 t.for_each_field(rex, [](std::string_view name, auto& value) {
-    // name: "name", "age", "breed"
-    // value: typed reference — std::string&, int&, std::string&
+    // name: "name", "breed", "age"
+    // value: typed reference — std::string&, std::string&, int&
 });
 ```
 
@@ -772,7 +794,7 @@ using namespace def_type::validations;
 |-----------|-----------|------------|
 | `not_empty{}` | `std::string` | String is empty |
 | `max_length{N}` | `std::string` | String length exceeds N |
-| `positive{}` | Any numeric type | Value is ≤ 0 |
+| `in_range{.min, .max}` | `int` | Value is outside [min, max] |
 
 Combine validators with `validators(...)`:
 
@@ -783,7 +805,7 @@ auto t = type_def("Config")
     .field<std::string>("token", std::string(""),
         validators(not_empty{}, max_length{50}))
     .field<int>("retries", 0,
-        validators(positive{}));
+        validators(in_range{.min = 1, .max = 999}));
 
 // Typed
 struct Config {
@@ -793,14 +815,14 @@ struct Config {
     };
     field<int> retries {
         .value = 0,
-        .validators = validators(positive{})
+        .validators = validators(in_range{.min = 1, .max = 999})
     };
 };
 
 // Hybrid
 auto config_t = type_def<PlainConfig>()
     .field(&PlainConfig::token, "token", validators(not_empty{}, max_length{50}))
-    .field(&PlainConfig::retries, "retries", validators(positive{}));
+    .field(&PlainConfig::retries, "retries", validators(in_range{.min = 1, .max = 999}));
 ```
 
 ### Dynamic — Validators Without Default Value
@@ -810,7 +832,7 @@ You can attach validators without providing a default — the field gets the typ
 ```cpp
 auto t = type_def("Dog")
     .field<std::string>("name", validators(not_empty{}))
-    .field<int>("age", validators(positive{}));
+    .field<int>("age", validators(in_range{.min = 1, .max = 999}));
 ```
 
 ### Custom Validators
@@ -911,7 +933,7 @@ auto t = type_def("Dog")
         validators(not_empty{}),
         with<help_info>({.summary = "Dog's name"}))
     .field<int>("age", 0,
-        validators(positive{}),
+        validators(in_range{.min = 1, .max = 999}),
         with<cli_meta>({.cli = {.short_flag = 'a'}}),
         with<help_info>({.summary = "Age in years"}));
 

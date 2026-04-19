@@ -107,7 +107,7 @@ TEST_CASE("spike: valid() becomes true after fixing values", "[validation][spike
         .field<std::string>("name", std::string(""),
             validators(not_empty{}))
         .field<int>("age", 0,
-            validators(positive{}));
+            validators(in_range{.min = 1, .max = 999}));
 
     auto dog = dog_type.create();
     REQUIRE(!dog.valid());
@@ -132,7 +132,7 @@ TEST_CASE("spike: validators don't affect set/get/to_json", "[validation][spike]
         .field<std::string>("name", std::string(""),
             validators(not_empty{}))
         .field<int>("age", 0,
-            validators(positive{}));
+            validators(in_range{.min = 1, .max = 999}));
 
     auto dog = dog_type.create();
 
@@ -168,7 +168,7 @@ TEST_CASE("spike: validators and with<> metas in same field call", "[validation]
             validators(not_empty{}),
             with<spike_help_info>({.summary = "Dog's name"}))
         .field<int>("age", 0,
-            validators(positive{}),
+            validators(in_range{.min = 1, .max = 999}),
             with<spike_cli_meta>({.cli = {.short_flag = 'a'}}),
             with<spike_help_info>({.summary = "Age in years"}));
 
@@ -219,16 +219,6 @@ struct starts_with_uppercase {
     }
 };
 
-struct in_range {
-    int minimum;
-    int maximum;
-    std::optional<std::string> operator()(int value) const {
-        if (value >= minimum && value <= maximum)
-            return std::nullopt;
-        return std::format("{} must be between {} and {}", value, minimum, maximum);
-    }
-};
-
 TEST_CASE("spike: custom validator — basic contract", "[validation][dynamic][custom]") {
     auto dog_type = type_def("Dog")
         .field<std::string>("name", std::string("rex"),
@@ -250,7 +240,7 @@ TEST_CASE("spike: custom validator — basic contract", "[validation][dynamic][c
 TEST_CASE("spike: custom validator with parameters", "[validation][dynamic][custom]") {
     auto dog_type = type_def("Dog")
         .field<int>("age", 0,
-            validators(in_range{.minimum = 0, .maximum = 30}));
+            validators(in_range{.min = 0, .max = 30}));
 
     auto dog = dog_type.create();
     REQUIRE(dog.valid());  // 0 is in range [0, 30]
@@ -271,13 +261,13 @@ TEST_CASE("spike: custom validators mixed with built-ins", "[validation][dynamic
         .field<std::string>("name", std::string(""),
             validators(not_empty{}, starts_with_uppercase{}))
         .field<int>("age", 0,
-            validators(positive{}, in_range{.minimum = 1, .maximum = 30}));
+            validators(in_range{.min = 1, .max = 30}));
 
     auto dog = dog_type.create();
 
-    // Empty name fails not_empty (starts_with_uppercase passes on empty by design)
+    // Empty name fails not_empty, age 0 fails in_range
     auto result = dog.validate();
-    REQUIRE(result.error_count() >= 2);  // name: not_empty, age: positive + in_range overlap
+    REQUIRE(result.error_count() >= 2);
 
     dog.set("name", std::string("Rex"));
     dog.set("age", 5);
@@ -332,14 +322,14 @@ TEST_CASE("spike: nested validation — outer and inner both fail", "[validation
 
 TEST_CASE("spike: nested validation — valid() short-circuits across nesting", "[validation][dynamic][nested]") {
     auto inner_type = type_def("Inner")
-        .field<int>("value", 0, validators(positive{}));
+        .field<int>("value", 0, validators(in_range{.min = 1, .max = 999}));
 
     auto outer_type = type_def("Outer")
         .field<std::string>("label", std::string("ok"))
         .field("child", inner_type);
 
     auto outer = outer_type.create();
-    REQUIRE(!outer.valid());  // child.value is 0, fails positive
+    REQUIRE(!outer.valid());  // child.value is 0, fails in_range
 
     auto child = outer.get<type_instance>("child");
     child.set("value", 5);
@@ -447,7 +437,7 @@ TEST_CASE("spike: parse() reports validation errors", "[validation][dynamic][par
         .field<std::string>("name", std::string(""),
             validators(not_empty{}))
         .field<int>("age", 0,
-            validators(positive{}));
+            validators(in_range{.min = 1, .max = 999}));
 
     auto result = dog_type.parse(json{{"name", ""}, {"age", -5}});
 
@@ -556,7 +546,7 @@ struct ValidatedDog {
     };
     field<int> age {
         .value = 0,
-        .validators = validators(positive{})
+        .validators = validators(in_range{.min = 1, .max = 999})
     };
     field<std::string> breed;  // no validators
 };
@@ -583,7 +573,7 @@ TEST_CASE("typed: validate() collects all errors", "[validation][typed]") {
 
     auto result = dog_type.validate(dog);
     REQUIRE(!result);
-    REQUIRE(result.error_count() == 2);  // name: not_empty, age: positive
+    REQUIRE(result.error_count() == 2);  // name: not_empty, age: in_range
     REQUIRE(result.errors()[0].path == "name");
     REQUIRE(result.errors()[1].path == "age");
 }
@@ -594,7 +584,7 @@ TEST_CASE("typed: validate() reports constraint names", "[validation][typed]") {
 
     auto result = dog_type.validate(dog);
     REQUIRE(result.errors()[0].constraint == "not_empty");
-    REQUIRE(result.errors()[1].constraint == "positive");
+    REQUIRE(result.errors()[1].constraint == "in_range");
 }
 
 TEST_CASE("typed: fields without validators always pass", "[validation][typed]") {
@@ -638,7 +628,7 @@ TEST_CASE("hybrid: valid() returns false when validators fail", "[validation][hy
         .field(&HybridValidatedDog::name, "name",
             validators(not_empty{}))
         .field(&HybridValidatedDog::age, "age",
-            validators(positive{}))
+            validators(in_range{.min = 1, .max = 999}))
         .field(&HybridValidatedDog::breed, "breed");
 
     HybridValidatedDog dog;
@@ -650,7 +640,7 @@ TEST_CASE("hybrid: valid() returns true when all pass", "[validation][hybrid]") 
         .field(&HybridValidatedDog::name, "name",
             validators(not_empty{}))
         .field(&HybridValidatedDog::age, "age",
-            validators(positive{}));
+            validators(in_range{.min = 1, .max = 999}));
 
     HybridValidatedDog dog;
     dog.name = "Rex";
@@ -663,7 +653,7 @@ TEST_CASE("hybrid: validate() collects all errors", "[validation][hybrid]") {
         .field(&HybridValidatedDog::name, "name",
             validators(not_empty{}))
         .field(&HybridValidatedDog::age, "age",
-            validators(positive{}));
+            validators(in_range{.min = 1, .max = 999}));
 
     HybridValidatedDog dog;
     auto result = dog_type.validate(dog);
@@ -673,7 +663,7 @@ TEST_CASE("hybrid: validate() collects all errors", "[validation][hybrid]") {
     REQUIRE(result.errors()[0].path == "name");
     REQUIRE(result.errors()[0].constraint == "not_empty");
     REQUIRE(result.errors()[1].path == "age");
-    REQUIRE(result.errors()[1].constraint == "positive");
+    REQUIRE(result.errors()[1].constraint == "in_range");
 }
 
 TEST_CASE("hybrid: validators mixed with with<> metas", "[validation][hybrid]") {
@@ -683,7 +673,7 @@ TEST_CASE("hybrid: validators mixed with with<> metas", "[validation][hybrid]") 
             with<spike_help_info>({.summary = "Dog's name"}))
         .field(&HybridValidatedDog::age, "age",
             with<spike_cli_meta>({.cli = {.short_flag = 'a'}}),
-            validators(positive{}));
+            validators(in_range{.min = 1, .max = 999}));
 
     HybridValidatedDog dog;
     REQUIRE(!dog_type.valid(dog));
@@ -702,7 +692,7 @@ TEST_CASE("hybrid: fixing values makes validation pass", "[validation][hybrid]")
         .field(&HybridValidatedDog::name, "name",
             validators(not_empty{}))
         .field(&HybridValidatedDog::age, "age",
-            validators(positive{}));
+            validators(in_range{.min = 1, .max = 999}));
 
     HybridValidatedDog dog;
     REQUIRE(!dog_type.valid(dog));
@@ -916,7 +906,7 @@ struct ParseableDog {
     };
     field<int> age {
         .value = 0,
-        .validators = validators(positive{})
+        .validators = validators(in_range{.min = 1, .max = 999})
     };
     field<std::string> breed;
 };
@@ -946,7 +936,7 @@ TEST_CASE("typed parse: detects extra keys", "[validation][typed][parse]") {
 TEST_CASE("typed parse: detects missing fields", "[validation][typed][parse]") {
     auto result = type_def<ParseableDog>{}.parse(json{{"name", "Rex"}});
 
-    // age defaults to 0, which fails positive{} — so valid() is false
+    // age defaults to 0, which fails in_range — so valid() is false
     REQUIRE(!result.valid());
     REQUIRE(result.has_missing_fields());
     REQUIRE(result.missing_fields().size() == 2);  // age and breed
@@ -989,7 +979,7 @@ TEST_CASE("typed parse: checked_value throws on invalid", "[validation][typed][p
 TEST_CASE("hybrid parse: clean JSON returns valid result", "[validation][hybrid][parse]") {
     auto dog_type = type_def<HybridValidatedDog>()
         .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age", validators(positive{}))
+        .field(&HybridValidatedDog::age, "age", validators(in_range{.min = 1, .max = 999}))
         .field(&HybridValidatedDog::breed, "breed");
 
     auto result = dog_type.parse(json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}});
@@ -1029,7 +1019,7 @@ TEST_CASE("hybrid parse: detects missing fields", "[validation][hybrid][parse]")
 TEST_CASE("hybrid parse: reports validation errors", "[validation][hybrid][parse]") {
     auto dog_type = type_def<HybridValidatedDog>()
         .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age", validators(positive{}));
+        .field(&HybridValidatedDog::age, "age", validators(in_range{.min = 1, .max = 999}));
 
     auto result = dog_type.parse(json{{"name", ""}, {"age", -1}});
 
@@ -1042,7 +1032,7 @@ TEST_CASE("hybrid parse: reports validation errors", "[validation][hybrid][parse
 TEST_CASE("hybrid parse: checked_value throws on invalid", "[validation][hybrid][parse]") {
     auto dog_type = type_def<HybridValidatedDog>()
         .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age", validators(positive{}));
+        .field(&HybridValidatedDog::age, "age", validators(in_range{.min = 1, .max = 999}));
 
     auto result = dog_type.parse(json{{"name", ""}, {"age", 0}});
     REQUIRE_THROWS(result.checked_value());
@@ -1586,7 +1576,7 @@ TEST_CASE("dynamic: validators without default — compiles and validates", "[va
         .field<std::string>("name",
             validators(not_empty{}))
         .field<int>("age",
-            validators(positive{}));
+            validators(in_range{.min = 1, .max = 999}));
 
     auto dog = dog_type.create();
     REQUIRE(!dog.valid());
@@ -1639,7 +1629,7 @@ struct TypedMixedDog {
     field<int, with<typed_validation_cli, typed_validation_help>> age {
         .with = {{.cli = {.short_flag = 'a'}}, {.summary = "Age in years"}},
         .value = 0,
-        .validators = validators(positive{})
+        .validators = validators(in_range{.min = 1, .max = 999})
     };
     field<std::string> breed;
 };
