@@ -4,7 +4,7 @@
 #include <string_view>
 
 #ifdef DEF_TYPE_HAS_PFR
-#include <pfr.hpp>
+#include <boost/pfr.hpp>
 #endif
 
 #include <def_type/field.hpp>
@@ -19,12 +19,12 @@ namespace def_type::pfr_impl {
 
 template <typename T>
 consteval std::size_t field_count() {
-    return pfr::tuple_size_v<T>;
+    return boost::pfr::tuple_size_v<T>;
 }
 
 template <std::size_t I, typename T>
 consteval std::string_view field_name() {
-    return pfr::get_name<I, T>();
+    return boost::pfr::get_name<I, T>();
 }
 
 // Runtime field name extraction — completely avoids consteval to work around
@@ -70,24 +70,24 @@ std::string_view name_of_field_rt() {
 template <std::size_t I, typename T>
 std::string_view field_name_rt() {
     return name_of_field_rt<
-        pfr::detail::make_clang_wrapper(std::addressof(pfr::detail::sequence_tuple::get<I>(
-            pfr::detail::tie_as_tuple(pfr::detail::fake_object<T>())
+        boost::pfr::detail::make_clang_wrapper(std::addressof(boost::pfr::detail::sequence_tuple::get<I>(
+            boost::pfr::detail::tie_as_tuple(boost::pfr::detail::fake_object<T>())
         )))
     >();
 }
 #endif
 
 template <std::size_t I, typename T>
-using member_type = pfr::tuple_element_t<I, T>;
+using member_type = boost::pfr::tuple_element_t<I, T>;
 
 template <std::size_t I, typename T>
 constexpr decltype(auto) get_member(T& obj) {
-    return pfr::get<I>(obj);
+    return boost::pfr::get<I>(obj);
 }
 
 template <typename T, typename F>
 constexpr void for_each_member(T& obj, F&& fn) {
-    pfr::for_each_field(obj, std::forward<F>(fn));
+    boost::pfr::for_each_field(obj, std::forward<F>(fn));
 }
 
 }  // namespace def_type::pfr_impl
