@@ -1,0 +1,8 @@
+{
+    "name": "def-type-smoke",
+    "version-string": "0.0.1",
+    "dependencies": [
+        "def-type",
+        "catch2"
+    ]
+}

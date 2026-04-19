@@ -1,0 +1,18 @@
+{
+    "default-registry": {
+        "kind": "git",
+        "repository": "https://github.com/microsoft/vcpkg.git",
+        "baseline": "0000000000000000000000000000000000000000"
+    },
+    "registries": [
+        {
+            "kind": "git",
+            "repository": "https://github.com/BuildWithCollab/Packages.git",
+            "baseline": "0000000000000000000000000000000000000000",
+            "packages": [
+                "def-type",
+                "pfr-non-boost"
+            ]
+        }
+    ]
+}
