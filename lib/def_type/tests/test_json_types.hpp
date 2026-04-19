@@ -241,16 +241,6 @@ constexpr auto def_type::struct_info<PersonList>() {
 }
 
 template <>
-constexpr auto def_type::struct_info<VecOfVecOfAddresses>() {
-    return def_type::field_info<VecOfVecOfAddresses>("blocks");
-}
-
-template <>
-constexpr auto def_type::struct_info<MapOfVecOfAddresses>() {
-    return def_type::field_info<MapOfVecOfAddresses>("regions");
-}
-
-template <>
 constexpr auto def_type::struct_info<VecOfEnums>() {
     return def_type::field_info<VecOfEnums>("methods");
 }
@@ -448,6 +438,18 @@ struct VecOfVecOfAddresses {
 struct MapOfVecOfAddresses {
     field<std::map<std::string, std::vector<Address>>> regions;
 };
+
+#ifndef DEF_TYPE_HAS_PFR
+template <>
+constexpr auto def_type::struct_info<VecOfVecOfAddresses>() {
+    return def_type::field_info<VecOfVecOfAddresses>("blocks");
+}
+
+template <>
+constexpr auto def_type::struct_info<MapOfVecOfAddresses>() {
+    return def_type::field_info<MapOfVecOfAddresses>("regions");
+}
+#endif
 
 // ── Enum types ───────────────────────────────────────────────────────────
 
