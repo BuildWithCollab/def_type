@@ -1,15 +1,15 @@
 # def_type
 
-**A C++ type definition framework where structs describe themselves.**
+**Write a struct. Get reflection, serialization, validation, and schema queries for free.**
 
-Define a type once — with fields, metadata, defaults, and constraints — and get reflection, serialization, validation, and schema queries for free. No macros. No code generation. Just C++23.
+Just write a normal C++ struct — `type_def<T>` discovers every member automatically. Need validation or metadata on specific fields? Wrap them with `field<T>`. Everything else just works. No macros. No code generation. No registration. Just C++23.
 
 ## Table of Contents
 
 - [The Problem](#the-problem)
 - [Quick Start](#quick-start)
-  - [Let Your Struct Be the Schema](#let-your-struct-be-the-schema)
-  - [Plain Structs — Zero Wrappers](#plain-structs--zero-wrappers)
+  - [Just Write a Struct](#just-write-a-struct)
+  - [Adding Validation and Metadata](#adding-validation-and-metadata)
   - [When to Use `field<>`](#when-to-use-field)
   - [The Dynamic Path — No Struct Required](#the-dynamic-path--no-struct-required)
   - [One Concept to Rule Them All](#one-concept-to-rule-them-all)
@@ -75,7 +75,51 @@ Every framework solves this differently — Unreal has `UPROPERTY()` macros, Qt 
 using namespace def_type;
 ```
 
-### Let Your Struct Be the Schema
+### Just Write a Struct
+
+```cpp
+struct Dog {
+    std::string name;
+    int         age = 0;
+    std::string breed;
+};
+
+// That's it. type_def sees everything.
+type_def<Dog> t;
+
+t.name();          // "Dog"
+t.field_count();   // 3
+t.field_names();   // ["name", "age", "breed"]
+
+Dog rex;
+rex.name = "Rex";
+rex.age = 3;
+rex.breed = "Husky";
+
+// Serialize to JSON
+auto j = to_json(rex);
+// {"name": "Rex", "age": 3, "breed": "Husky"}
+
+// Deserialize from JSON
+auto buddy = from_json<Dog>(R"({"name": "Buddy", "age": 5, "breed": "Lab"})");
+buddy.name;  // "Buddy"
+
+// Set/get by name at runtime
+t.set(rex, "name", std::string("Max"));
+t.get<std::string>(rex, "name");   // "Max"
+
+// Iterate all fields
+t.for_each_field(rex, [](std::string_view name, auto& value) {
+    // name: "name", "age", "breed"
+    // value: typed reference — std::string&, int&, std::string&
+});
+```
+
+No wrappers. No registration. No macros. Just a plain C++ struct and `type_def<T>{}`.
+
+### Adding Validation and Metadata
+
+When you need validators or field-level metadata, wrap individual fields with `field<T>`:
 
 ```cpp
 struct cli_info {
@@ -85,30 +129,26 @@ struct cli_info {
 struct Dog {
     meta<endpoint_info> endpoint{{.path = "/dogs", .method = "POST"}};
 
-    field<std::string>  name;
+    std::string name;                                 // plain — still works
     field<std::string, with<cli_info>>  breed {
         .with = {{.help = "Name of the dog breed"}}
     };
-    field<int>          age {
+    field<int> age {
         .value = 0,
         .validators = validators(in_range{.min = 0, .max = 25})
     };
 };
 
-// That's it. The type definition IS the struct.
 type_def<Dog> t;
-
-t.name();                        // "Dog"
-t.field_count();                  // 3
-t.field_names();                  // ["name", "breed", "age"]
+t.field_count();                  // 3 — all members discovered
 t.has_meta<endpoint_info>();      // true
 t.meta<endpoint_info>().path;     // "/dogs"
 
-// Field-level metadata
+// Field-level metadata (only on field<> members with with<>)
 t.field("breed").has_meta<cli_info>();          // true
 t.field("breed").meta<cli_info>().help;         // "Name of the dog breed"
 
-// Validation
+// Validation (only on field<> members with validators)
 Dog rex;
 rex.name = "Rex";
 rex.breed = "Husky";
@@ -124,86 +164,24 @@ result.errors()[0].path;          // "age"
 result.errors()[0].constraint;    // "in_range"
 ```
 
-`field<T>` is a transparent wrapper — it *is* the value. Implicit conversion, `operator->`, aggregate initialization. Your struct stays an aggregate:
+`field<T>` is a transparent wrapper — it *is* the value. Implicit conversion, `operator->`, aggregate initialization:
 
 ```cpp
-Dog rex;
-rex.name = "Rex";           // just works — implicit conversion
+rex.breed = "Husky";          // just works — implicit conversion
 rex.age = 3;
-std::string name_copy = rex.name;   // just works — implicit conversion back
-rex.name->size();            // operator-> passes through to std::string
-```
-
-`type_def<Dog>` can iterate fields, query metadata, set/get by name:
-
-```cpp
-Dog rex = t.create();
-
-t.set(rex, "name", std::string("Rex"));
-t.set(rex, "age", 3);
-t.set(rex, "breed", std::string("Husky"));
-
-t.get<std::string>(rex, "name");   // "Rex"
-t.get<int>(rex, "age");            // 3
-
-t.for_each_field(rex, [](std::string_view name, auto& value) {
-    // name: "name", "breed", "age"
-    // value: typed reference — std::string&, std::string&, int&
-});
-```
-
-### Plain Structs — Zero Wrappers
-
-Don't want to use `field<>`? You don't have to. Plain structs work out of the box — PFR auto-discovers every member:
-
-```cpp
-struct PlainDog {
-    std::string name;
-    int age = 0;
-    std::string breed;
-};
-
-type_def<PlainDog> t;
-t.name();          // "PlainDog"
-t.field_count();   // 3
-t.field_names();   // ["name", "age", "breed"]
-
-PlainDog buddy;
-t.set(buddy, "name", std::string("Buddy"));
-t.get<std::string>(buddy, "name");    // "Buddy"
-buddy.name;                            // "Buddy"
-
-auto j = to_json(buddy, t);           // {"name": "Buddy", "age": 0, "breed": ""}
-```
-
-No wrappers, no registration, no macros. Just a plain aggregate struct and `type_def<T>{}`.
-
-You can mix plain members and `field<>` members in the same struct. `type_def` discovers them all:
-
-```cpp
-struct MixedDog {
-    std::string name;                    // plain — auto-discovered
-    field<int> age {
-        .value = 0,
-        .validators = validators(in_range{.min = 0, .max = 25})
-    };
-    std::string breed;                   // plain — auto-discovered
-};
-
-type_def<MixedDog> t;
-t.field_count();   // 3 — all members discovered
-t.field_names();   // ["name", "age", "breed"]
+std::string b = rex.breed;    // implicit conversion back
+rex.breed->size();             // operator-> passes through to std::string
 ```
 
 ### When to Use `field<>`
 
-`field<>` is optional. Use it when you need:
+`field<>` is **optional**. Use it when you need:
 
 - **Validators** — `.validators = validators(not_empty{}, max_length{50})`
 - **Field-level metadata** — `field<T, with<cli_meta>>` attaches domain-specific metadata
 - **Both** — validators + metas on the same field
 
-If you just want reflection, serialization, and schema queries — plain struct members are all you need.
+Plain members and `field<>` members coexist freely in the same struct. If you just want reflection, serialization, and schema queries — plain struct members are all you need.
 
 ### The Dynamic Path — No Struct Required
 
