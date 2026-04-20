@@ -50,22 +50,6 @@ TEST_CASE("dynamic: field() works for each field", "[type_def][dynamic][field_qu
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// field_def has_default()
-// ═════════════════════════════════════════════════════════════════════════
-
-TEST_CASE("dynamic: field().has_default() false", "[type_def][dynamic][field_query]") {
-    auto t = type_def("Event")
-        .field<std::string>("title");
-    REQUIRE(t.field("title").has_default() == false);
-}
-
-TEST_CASE("dynamic: field().has_default() true", "[type_def][dynamic][field_query]") {
-    auto t = type_def("Event")
-        .field<int>("count", 100);
-    REQUIRE(t.field("count").has_default() == true);
-}
-
-// ═════════════════════════════════════════════════════════════════════════
 // field_def default_value<V>()
 // ═════════════════════════════════════════════════════════════════════════
 
@@ -109,26 +93,18 @@ TEST_CASE("type_instance: field() returns field_def via type()", "[type_instance
     auto obj = t.create();
 
     REQUIRE(obj.type().field("title").name() == "title");
-    REQUIRE(obj.type().field("count").has_default() == true);
     REQUIRE(obj.type().field("count").default_value<int>() == 100);
 }
 
-TEST_CASE("typed: field().has_default() returns false", "[type_def][typed][field_query]") {
+TEST_CASE("typed: field().default_value() returns T{} value", "[type_def][typed][field_query]") {
     type_def<SimpleArgs> t;
-    REQUIRE(t.field("name").has_default() == false);
+    REQUIRE(t.field("name").default_value<std::string>() == "");
 }
 
-TEST_CASE("hybrid: field().has_default() returns false", "[type_def][hybrid][field_query]") {
+TEST_CASE("typed: plain struct field().default_value() returns T{} value", "[type_def][typed][field_query]") {
     type_def<PlainDog> t;
-    REQUIRE(t.field("name").has_default() == false);
-}
-
-TEST_CASE("type_instance: field_def has_default() false", "[type_instance][field_query]") {
-    auto t = type_def("Event")
-        .field<std::string>("title");
-    auto obj = t.create();
-
-    REQUIRE(obj.type().field("title").has_default() == false);
+    REQUIRE(t.field("name").default_value<std::string>() == "");
+    REQUIRE(t.field("age").default_value<int>() == 0);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -199,7 +175,7 @@ TEST_CASE("hybrid: field() throws for meta member names", "[type_def][hybrid][fi
 TEST_CASE("typed: field() finds plain member names", "[type_def][typed][field_query]") {
     auto fv = type_def<MixedStruct>{}.field("counter");
     REQUIRE(fv.name() == "counter");
-    REQUIRE(fv.has_default() == false);
+    REQUIRE(fv.default_value<int>() == 0);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -218,11 +194,11 @@ TEST_CASE("dynamic: field_def default_value throws when no default set", "[type_
     REQUIRE_THROWS_AS(t.field("count").default_value<int>(), std::logic_error);
 }
 
-TEST_CASE("typed: field_def default_value throws", "[type_def][typed][field_query][throw]") {
-    REQUIRE_THROWS_AS(type_def<SimpleArgs>{}.field("name").default_value<std::string>(), std::logic_error);
+TEST_CASE("typed: field_def default_value works for auto-discovered fields", "[type_def][typed][field_query]") {
+    REQUIRE(type_def<SimpleArgs>{}.field("name").default_value<std::string>() == "");
 }
 
-TEST_CASE("hybrid: field_def default_value throws", "[type_def][hybrid][field_query][throw]") {
+TEST_CASE("typed: plain struct field_def default_value works", "[type_def][typed][field_query]") {
     type_def<PlainDog> t;
-    REQUIRE_THROWS_AS(t.field("name").default_value<std::string>(), std::logic_error);
+    REQUIRE(t.field("name").default_value<std::string>() == "");
 }

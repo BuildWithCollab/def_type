@@ -224,6 +224,5 @@ TEST_CASE("type_instance: full integration", "[type_instance][integration]") {
     REQUIRE(party.type().name() == "Event");
     REQUIRE(party.type().has_meta<endpoint_info>());
     REQUIRE(party.type().has_meta<help_info>());
-    REQUIRE(party.type().field("attendees").has_default());
     REQUIRE(party.type().field("attendees").default_value<int>() == 100);
 }

@@ -323,14 +323,15 @@ namespace def_type::detail {
         using member_t = def_type::detail::member_type<I, TT>;
         if constexpr (!def_type::is_meta<member_t>) {
             if (def_type::detail::dispatch_field_name_rt<I, TT>() == target) {
+                TT instance{};
+                auto& member = def_type::detail::dispatch_get_member<I>(instance);
                 out.name = std::string(target);
                 out.type = typeid(value_type_of<member_t>);
-                out.has_default = false;
+                out.default_value = std::any(unwrap_value(member));
+                out.has_default = true;
                 out.metas.clear();
                 if constexpr (def_type::is_field<member_t>) {
-                    TT instance{};
-                    extract_with_metas(out.metas,
-                        def_type::detail::dispatch_get_member<I>(instance).with);
+                    extract_with_metas(out.metas, member.with);
                 }
                 found = true;
             }

@@ -22,8 +22,6 @@ public:
 
     std::string_view name() const { return def_->name; }
 
-    bool has_default() const { return def_->has_default; }
-
     template <typename V>
     V default_value() const {
         auto* p = std::any_cast<V>(&def_->default_value);

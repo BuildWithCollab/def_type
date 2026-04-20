@@ -396,7 +396,7 @@ TEST_CASE("dynamic: for_each_field()", "[type_def][dynamic][for_each_field]") {
     bool found_default = false;
     t.for_each_field([&](field_def fd) {
         names.emplace_back(fd.name());
-        if (fd.name() == "count" && fd.has_default())
+        if (fd.name() == "count" && fd.default_value<int>() == 100)
             found_default = true;
     });
 
@@ -881,10 +881,7 @@ TEST_CASE("dynamic: full integration", "[type_def][dynamic][integration]") {
     REQUIRE(event_t.has_field("verbose"));
     REQUIRE(!event_t.has_field("nope"));
 
-    REQUIRE(!event_t.field("title").has_default());
-    REQUIRE(event_t.field("attendees").has_default());
     REQUIRE(event_t.field("attendees").default_value<int>() == 100);
-    REQUIRE(event_t.field("verbose").has_default());
     REQUIRE(event_t.field("verbose").default_value<bool>() == false);
 
     // Field-level metas
