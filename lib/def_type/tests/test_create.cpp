@@ -13,9 +13,7 @@ TEST_CASE("typed: create() returns default-constructed instance", "[type_def][ty
 }
 
 TEST_CASE("hybrid: create()", "[type_def][hybrid][create]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
     PlainDog dog = t.create();
     REQUIRE(dog.name.empty());
     REQUIRE(dog.age == 0);
@@ -64,9 +62,7 @@ TEST_CASE("typed: create() result is mutable and works with set", "[type_def][ty
 }
 
 TEST_CASE("hybrid: create() result is mutable and works with set", "[type_def][hybrid][create]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
     PlainDog dog = t.create();
     t.set(dog, "name", std::string("Buddy"));
     REQUIRE(t.get<std::string>(dog, "name") == "Buddy");
@@ -148,9 +144,7 @@ TEST_CASE("typed: multiple instances are independent", "[type_def][typed][create
 }
 
 TEST_CASE("hybrid: multiple instances are independent", "[type_def][hybrid][create][independence]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
     PlainDog a = t.create();
     PlainDog b = t.create();
 

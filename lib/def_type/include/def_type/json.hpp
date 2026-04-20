@@ -263,10 +263,10 @@ T from_json(const std::string& json_str) {
     return from_json<T>(j);
 }
 
-// ── Hybrid to_json / from_json — plain structs with type_def ────────────
+// ── to_json / from_json with explicit type_def ──────────────────────────
 
-template <typename T, typename... Regs>
-nlohmann::json to_json(const T& obj, const type_def<T, Regs...>& typedef_schema) {
+template <typename T>
+nlohmann::json to_json(const T& obj, const type_def<T>& typedef_schema) {
     nlohmann::json j = nlohmann::json::object();
     typedef_schema.for_each_field(obj, [&](std::string_view name, const auto& value) {
         j[std::string(name)] = detail::value_to_json(value);
@@ -274,15 +274,15 @@ nlohmann::json to_json(const T& obj, const type_def<T, Regs...>& typedef_schema)
     return j;
 }
 
-template <typename T, typename... Regs>
-std::string to_json_string(const T& obj, const type_def<T, Regs...>& typedef_schema, int indent = -1) {
+template <typename T>
+std::string to_json_string(const T& obj, const type_def<T>& typedef_schema, int indent = -1) {
     auto j = to_json(obj, typedef_schema);
     return indent < 0 ? j.dump() : j.dump(indent);
 }
 
-template <typename T, typename... Regs>
+template <typename T>
     requires std::is_aggregate_v<T>
-T from_json(const nlohmann::json& j, const type_def<T, Regs...>& typedef_schema) {
+T from_json(const nlohmann::json& j, const type_def<T>& typedef_schema) {
     if (!j.is_object()) throw std::logic_error("from_json: expected JSON object");
     T result{};
     typedef_schema.for_each_field(result, [&](std::string_view name, auto& value) {

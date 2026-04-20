@@ -23,9 +23,7 @@ TEST_CASE("typed: set() assigns a bool field", "[type_def][typed][set]") {
 }
 
 TEST_CASE("hybrid: set() with matching type", "[type_def][hybrid][set]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
     PlainDog rex;
 
     t.set(rex, "name", std::string("Rex"));
@@ -59,8 +57,7 @@ TEST_CASE("typed: set() with const char* to string field", "[type_def][typed][se
 }
 
 TEST_CASE("hybrid: set() with const char* to string field", "[type_def][hybrid][set]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
 
     t.set(rex, "name", "Rex");
@@ -90,8 +87,7 @@ TEST_CASE("typed: set() overwrites existing values", "[type_def][typed][set]") {
 }
 
 TEST_CASE("hybrid: set() overwrites existing values", "[type_def][hybrid][set]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
 
     t.set(rex, "name", std::string("Rex"));
@@ -137,9 +133,7 @@ TEST_CASE("typed: set() works on struct with metas (MetaDog)", "[type_def][typed
 }
 
 TEST_CASE("hybrid: set() on struct with meta members (MultiTagDog)", "[type_def][hybrid][set]") {
-    auto t = type_def<MultiTagDog>()
-        .field(&MultiTagDog::name, "name")
-        .field(&MultiTagDog::age, "age");
+    type_def<MultiTagDog> t;
     MultiTagDog dog;
     t.set(dog, "name", std::string("Rex"));
     t.set(dog, "age", 3);
@@ -182,8 +176,7 @@ TEST_CASE("typed: get() finds field by name", "[type_def][typed][get]") {
 }
 
 TEST_CASE("hybrid: get() finds field by name", "[type_def][hybrid][get]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
     PlainDog rex;
     rex.age = 25;
 
@@ -215,8 +208,7 @@ TEST_CASE("typed: get() callback allows mutation", "[type_def][typed][get]") {
 }
 
 TEST_CASE("hybrid: get() callback allows mutation", "[type_def][hybrid][get]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     rex.name = "Original";
 
@@ -249,8 +241,7 @@ TEST_CASE("typed: get() on const instance", "[type_def][typed][get]") {
 }
 
 TEST_CASE("hybrid: get() on const instance", "[type_def][hybrid][get]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
     PlainDog rex;
     rex.age = 42;
     const PlainDog& cref = rex;
@@ -280,9 +271,7 @@ TEST_CASE("typed: get<V>() returns value for matching type", "[type_def][typed][
 }
 
 TEST_CASE("hybrid: get<T>() returns value", "[type_def][hybrid][get_typed]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
     PlainDog rex;
     rex.name = "Rex";
     rex.age = 3;
@@ -343,10 +332,7 @@ TEST_CASE("typed: get<V>() round-trips with set()", "[type_def][typed][get_typed
 }
 
 TEST_CASE("hybrid: get<T>() round-trips with set()", "[type_def][hybrid][get_typed]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::breed, "breed");
+    type_def<PlainDog> t;
     PlainDog rex;
 
     t.set(rex, "name", std::string("Rex"));
@@ -379,8 +365,7 @@ TEST_CASE("type_instance: get() round-trips with set()", "[type_instance][get][s
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("hybrid: get<V>() on const instance", "[type_def][hybrid][get_typed]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     rex.name = "Rex";
     const PlainDog& cref = rex;
@@ -452,13 +437,7 @@ TEST_CASE("typed: CliArgs integration — fields, metas, and extensions", "[type
 }
 
 TEST_CASE("hybrid: full integration", "[type_def][hybrid][integration]") {
-    auto dog_t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name",
-            with<help_info>({.summary = "Dog's name"}))
-        .field(&PlainDog::age, "age",
-            with<help_info>({.summary = "Age in years"}),
-            with<render_meta>({.render = {.style = "bold"}}))
-        .field(&PlainDog::breed, "breed");
+    type_def<PlainDog> dog_t;
 
     // Schema checks
     REQUIRE(dog_t.name() == "PlainDog");
@@ -467,13 +446,6 @@ TEST_CASE("hybrid: full integration", "[type_def][hybrid][integration]") {
     REQUIRE(names[0] == "name");
     REQUIRE(names[1] == "age");
     REQUIRE(names[2] == "breed");
-
-    // Field metas
-    REQUIRE(dog_t.field("name").has_meta<help_info>());
-    REQUIRE(std::string_view{dog_t.field("name").meta<help_info>().summary} == "Dog's name");
-    REQUIRE(dog_t.field("age").has_meta<help_info>());
-    REQUIRE(dog_t.field("age").has_meta<render_meta>());
-    REQUIRE(!dog_t.field("breed").has_meta<help_info>());
 
     // Create + set + get
     PlainDog rex = dog_t.create();
@@ -526,8 +498,7 @@ TEST_CASE("typed: set() throws for unknown field name", "[type_def][typed][set][
 }
 
 TEST_CASE("hybrid: set() throws for unknown field", "[type_def][hybrid][set][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     REQUIRE_THROWS_AS(t.set(rex, "nope", 42), std::logic_error);
 }
@@ -556,8 +527,7 @@ TEST_CASE("typed: set() throws for empty string field name", "[type_def][typed][
 }
 
 TEST_CASE("hybrid: set() throws for empty string field name", "[type_def][hybrid][set][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     REQUIRE_THROWS_AS(t.set(rex, "", 42), std::logic_error);
 }
@@ -579,8 +549,7 @@ TEST_CASE("typed: get<V>() throws for empty string field name", "[type_def][type
 }
 
 TEST_CASE("hybrid: get<V>() throws for empty string field name", "[type_def][hybrid][get_typed][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     REQUIRE_THROWS_AS(t.get<int>(rex, ""), std::logic_error);
 }
@@ -597,8 +566,7 @@ TEST_CASE("typed: get() callback throws for empty string field name", "[type_def
 }
 
 TEST_CASE("hybrid: get() callback throws for empty string field name", "[type_def][hybrid][get][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     REQUIRE_THROWS_AS(
         t.get(rex, "", [](auto, auto&) {}),
@@ -615,8 +583,7 @@ TEST_CASE("typed: set() throws for type mismatch", "[type_def][typed][set][throw
 }
 
 TEST_CASE("hybrid: set() throws for type mismatch", "[type_def][hybrid][set][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     REQUIRE_THROWS_AS(t.set(rex, "name", 42), std::logic_error);
 }
@@ -641,8 +608,7 @@ TEST_CASE("typed: set() does not modify field on type mismatch", "[type_def][typ
 }
 
 TEST_CASE("hybrid: set() does not modify field on type mismatch", "[type_def][hybrid][set][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     rex.name = "Untouched";
 
@@ -660,7 +626,7 @@ TEST_CASE("type_instance: set() does not modify field on type mismatch", "[type_
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// set() throws for meta/plain member names
+// set() throws for meta member names
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("typed: set() throws for meta member names", "[type_def][typed][set][throw]") {
@@ -675,11 +641,6 @@ TEST_CASE("hybrid: set() throws for meta member names", "[type_def][hybrid][set]
     REQUIRE_THROWS_AS(t.set(rex, "help", 42), std::logic_error);
 }
 
-TEST_CASE("typed: set() throws for plain member names", "[type_def][typed][set][throw]") {
-    MixedStruct ms;
-    REQUIRE_THROWS_AS(type_def<MixedStruct>{}.set(ms, "counter", 42), std::logic_error);
-}
-
 // ═════════════════════════════════════════════════════════════════════════
 // get<V>() throws for unknown field
 // ═════════════════════════════════════════════════════════════════════════
@@ -691,8 +652,7 @@ TEST_CASE("typed: get<V>() throws for unknown field", "[type_def][typed][get_typ
 }
 
 TEST_CASE("hybrid: get<V>() throws for unknown field", "[type_def][hybrid][get_typed][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex;
     REQUIRE_THROWS_AS(t.get<std::string>(rex, "nope"), std::logic_error);
 }
@@ -716,8 +676,7 @@ TEST_CASE("typed: get<V>() throws for type mismatch", "[type_def][typed][get_typ
 }
 
 TEST_CASE("hybrid: get<V>() throws for type mismatch", "[type_def][hybrid][get_typed][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
     PlainDog rex;
     rex.age = 5;
     REQUIRE_THROWS_AS(t.get<std::string>(rex, "age"), std::logic_error);
@@ -731,7 +690,7 @@ TEST_CASE("type_instance: get<V>() throws for type mismatch", "[type_instance][g
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// get<V>() throws for meta/plain member names
+// get<V>() throws for meta member names
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("typed: get<V>() throws for meta member names", "[type_def][typed][get_typed][throw]") {
@@ -743,11 +702,6 @@ TEST_CASE("hybrid: get<V>() throws for meta member names", "[type_def][hybrid][g
     type_def<MetaDog> t;
     MetaDog rex;
     REQUIRE_THROWS_AS(t.get<int>(rex, "help"), std::logic_error);
-}
-
-TEST_CASE("typed: get<V>() throws for plain member names", "[type_def][typed][get_typed][throw]") {
-    MixedStruct ms;
-    REQUIRE_THROWS_AS(type_def<MixedStruct>{}.get<int>(ms, "counter"), std::logic_error);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -762,8 +716,7 @@ TEST_CASE("typed: get() throws for unknown field name", "[type_def][typed][get][
 }
 
 TEST_CASE("hybrid: get() callback throws for unknown field", "[type_def][hybrid][get][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     PlainDog rex{"Rex", 3, "Husky"};
     REQUIRE_THROWS_AS(
         t.get(rex, "nope", [](std::string_view, auto&) {}),
@@ -771,7 +724,7 @@ TEST_CASE("hybrid: get() callback throws for unknown field", "[type_def][hybrid]
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// get() callback throws for meta/plain member names
+// get() callback throws for meta member names
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("typed: get() throws for meta member names", "[type_def][typed][get][throw]") {
@@ -792,9 +745,3 @@ TEST_CASE("hybrid: get() callback throws for meta member names", "[type_def][hyb
         std::logic_error);
 }
 
-TEST_CASE("typed: get() callback throws for plain member names", "[type_def][typed][get][throw]") {
-    MixedStruct ms;
-    REQUIRE_THROWS_AS(
-        type_def<MixedStruct>{}.get(ms, "counter", [](std::string_view, auto&) {}),
-        std::logic_error);
-}

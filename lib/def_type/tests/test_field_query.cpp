@@ -11,8 +11,7 @@ TEST_CASE("typed: field() returns view with correct name", "[type_def][typed][fi
 }
 
 TEST_CASE("hybrid: field().name()", "[type_def][hybrid][field_query]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     REQUIRE(t.field("name").name() == "name");
 }
 
@@ -34,10 +33,7 @@ TEST_CASE("typed: field() works for each field", "[type_def][typed][field_query]
 }
 
 TEST_CASE("hybrid: field() works for each field", "[type_def][hybrid][field_query]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::breed, "breed");
+    type_def<PlainDog> t;
     REQUIRE(t.field("name").name() == "name");
     REQUIRE(t.field("age").name() == "age");
     REQUIRE(t.field("breed").name() == "breed");
@@ -91,8 +87,7 @@ TEST_CASE("typed: single field struct field access", "[type_def][typed][field_qu
 }
 
 TEST_CASE("hybrid: single field struct field access", "[type_def][hybrid][field_query]") {
-    auto t = type_def<PlainPoint>()
-        .field(&PlainPoint::x, "x");
+    type_def<PlainPoint> t;
     REQUIRE(t.field("x").name() == "x");
 }
 
@@ -124,8 +119,7 @@ TEST_CASE("typed: field().has_default() returns false", "[type_def][typed][field
 }
 
 TEST_CASE("hybrid: field().has_default() returns false", "[type_def][hybrid][field_query]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     REQUIRE(t.field("name").has_default() == false);
 }
 
@@ -146,8 +140,7 @@ TEST_CASE("typed: field() throws for unknown name", "[type_def][typed][field_que
 }
 
 TEST_CASE("hybrid: field() throws for unknown name", "[type_def][hybrid][field_query][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     REQUIRE_THROWS_AS(t.field("nonexistent"), std::logic_error);
 }
 
@@ -172,8 +165,11 @@ TEST_CASE("typed: field() throws on meta-only struct", "[type_def][typed][field_
     REQUIRE_THROWS_AS(type_def<MetaOnly>{}.field("anything"), std::logic_error);
 }
 
-TEST_CASE("hybrid: field() throws on empty hybrid", "[type_def][hybrid][field_query][throw]") {
-    auto t = type_def<PlainDog>();
+TEST_CASE("hybrid: field() finds auto-discovered plain members", "[type_def][hybrid][field_query]") {
+    type_def<PlainDog> t;
+    REQUIRE(t.field("name").name() == "name");
+    REQUIRE(t.field("age").name() == "age");
+    REQUIRE(t.field("breed").name() == "breed");
     REQUIRE_THROWS_AS(t.field("anything"), std::logic_error);
 }
 
@@ -189,7 +185,7 @@ TEST_CASE("type_instance: field() throws on empty type_def", "[type_instance][fi
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// field() throws for meta / plain member names
+// field() throws for meta member names / finds plain member names
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("typed: field() throws for meta member names", "[type_def][typed][field_query][throw]") {
@@ -200,8 +196,10 @@ TEST_CASE("hybrid: field() throws for meta member names", "[type_def][hybrid][fi
     REQUIRE_THROWS_AS(type_def<MetaDog>{}.field("help"), std::logic_error);
 }
 
-TEST_CASE("typed: field() throws for plain member names", "[type_def][typed][field_query][throw]") {
-    REQUIRE_THROWS_AS(type_def<MixedStruct>{}.field("counter"), std::logic_error);
+TEST_CASE("typed: field() finds plain member names", "[type_def][typed][field_query]") {
+    auto fv = type_def<MixedStruct>{}.field("counter");
+    REQUIRE(fv.name() == "counter");
+    REQUIRE(fv.has_default() == false);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -225,7 +223,6 @@ TEST_CASE("typed: field_def default_value throws", "[type_def][typed][field_quer
 }
 
 TEST_CASE("hybrid: field_def default_value throws", "[type_def][hybrid][field_query][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     REQUIRE_THROWS_AS(t.field("name").default_value<std::string>(), std::logic_error);
 }

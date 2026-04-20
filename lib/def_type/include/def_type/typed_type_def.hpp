@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -25,9 +24,9 @@ namespace def_type {
 
 // ── type_def<T> — typed runtime schema with auto-discovery ───────────────
 //
-// Automatically discovers field<> and meta<> members of T via PFR or
-// the struct_info<T>() registry. Provides runtime access to field values,
-// type-level metadata, and schema information.
+// Automatically discovers all non-meta<> members of T via PFR or
+// the struct_info<T>() registry. field<> members get full support
+// (validators, with<> metas). Plain members are reflected as-is.
 //
 // Usage:
 //   type_def<Dog> dog_t;
@@ -37,22 +36,15 @@ namespace def_type {
 //   dog_t.meta<endpoint_info>().path; // "/dogs"
 //   dog_t.for_each_field(rex, [](std::string_view name, auto& value) { ... });
 
-template <typename T = detail::dynamic_tag, typename... Regs>
+template <typename T = detail::dynamic_tag>
 class type_def {
     static constexpr auto total_members_ = def_type::detail::dispatch_field_count<T>();
     using indices_ = std::make_index_sequence<total_members_>;
     using field_indices_ = decltype(detail::make_filtered_sequence<T, detail::is_field_at>(indices_{}));
 
-    // Typed hybrid registrations — each Reg is a typed_field_reg<T, MemT>
-    // preserving the real member type for real typed references in for_each.
-    std::tuple<Regs...> typed_regs_;
-
-    // Allow other type_def instantiations to access private constructor
-    template <typename U, typename... Rs>
+    // Allow other type_def instantiations to access validate_with_prefix
+    template <typename U>
     friend class type_def;
-
-    // Private constructor for builder chain
-    explicit type_def(std::tuple<Regs...> regs) : typed_regs_(std::move(regs)) {}
 
 public:
     type_def() = default;
@@ -66,59 +58,13 @@ public:
     // ── Field queries ────────────────────────────────────────────────
 
     std::size_t field_count() const {
-        return def_type::detail::field_count<T>() + sizeof...(Regs);
+        return def_type::detail::field_count<T>();
     }
 
     std::vector<std::string> field_names() const {
         auto discovered = def_type::detail::field_names<T>();
         std::vector<std::string> result(discovered.begin(), discovered.end());
-        std::apply([&](const auto&... regs) {
-            (result.push_back(regs.name), ...);
-        }, typed_regs_);
         return result;
-    }
-
-    // ── Field builder (hybrid registration) ──────────────────────────
-    //
-    // Returns a NEW type_def with the member type preserved in the
-    // template parameters. Each .field() call produces a new type.
-
-    template <typename MemT, typename... Withs>
-    auto field(MemT T::* member, std::string_view fname, Withs... withs) {
-        auto new_reg = detail::make_typed_reg<T>(member, fname, withs...);
-        auto new_tuple = std::tuple_cat(
-            std::move(typed_regs_),
-            std::make_tuple(std::move(new_reg)));
-        return type_def<T, Regs..., detail::typed_field_reg<T, MemT>>(
-            std::move(new_tuple));
-    }
-
-    // Overload accepting a nested type_def for schema-level nesting.
-    // The nested type_def's validate/valid are captured into the reg
-    // so the hybrid path can recurse into nested struct validation.
-    template <typename MemT, typename... NestedRegs, typename... Withs>
-    auto field(MemT T::* member, std::string_view fname,
-               const type_def<MemT, NestedRegs...>& nested_td, Withs... withs) {
-        auto new_reg = detail::make_typed_reg<T>(member, fname, withs...);
-        new_reg.nested_validate_fn =
-            [nested_td](const MemT& val, std::string_view prefix) {
-                auto result = nested_td.validate(val);
-                validation_result prefixed;
-                for (auto& err : result.errors()) {
-                    auto full_path = prefix.empty()
-                        ? err.path
-                        : std::string(prefix) + "." + err.path;
-                    prefixed.add({full_path, err.message, err.constraint});
-                }
-                return prefixed;
-            };
-        new_reg.nested_valid_fn =
-            [nested_td](const MemT& val) { return nested_td.valid(val); };
-        auto new_tuple = std::tuple_cat(
-            std::move(typed_regs_),
-            std::make_tuple(std::move(new_reg)));
-        return type_def<T, Regs..., detail::typed_field_reg<T, MemT>>(
-            std::move(new_tuple));
     }
 
     // ── Field queries by name ────────────────────────────────────────
@@ -127,30 +73,12 @@ public:
         auto discovered = def_type::detail::field_names<T>();
         for (auto& n : discovered)
             if (n == fname) return true;
-        bool found = false;
-        std::apply([&](const auto&... regs) {
-            ((regs.name == fname && (found = true, true)), ...);
-        }, typed_regs_);
-        return found;
+        return false;
     }
 
     field_def field(std::string_view fname) const {
-        // Check hybrid registered fields
-        thread_local detail::dynamic_field_def temp;
-        bool found = false;
-        std::apply([&](const auto&... regs) {
-            ((regs.name == fname && !found && (
-                temp.name = regs.name,
-                temp.type = typeid(std::remove_reference_t<
-                    decltype(std::declval<T>().*(regs.member))>),
-                temp.has_default = false,
-                temp.metas = regs.metas,
-                found = true, true)), ...);
-        }, typed_regs_);
-        if (found) return field_def(&temp);
-        // Check auto-discovered field<> members
         thread_local detail::dynamic_field_def discovered;
-        found = false;
+        bool found = false;
         detail::build_discovered_field_def<T>(
             discovered, fname, found, indices_{});
         if (found) return field_def(&discovered);
@@ -186,44 +114,23 @@ public:
     // ── Instance field iteration ────────────────────────────────────
     //
     // Callback signature: fn(std::string_view name, auto& value)
-    // Auto-discovered field<> members give typed references.
-    // Hybrid-registered fields also give real typed references.
+    // field<> members give the unwrapped value. Plain members give direct references.
 
     template <typename F>
     void for_each_field(T& obj, F&& fn) const {
         detail::for_each_field_value(obj, std::forward<F>(fn), indices_{});
-        std::apply([&](const auto&... regs) {
-            (fn(std::string_view(regs.name), obj.*(regs.member)), ...);
-        }, typed_regs_);
     }
 
     template <typename F>
     void for_each_field(const T& obj, F&& fn) const {
         detail::for_each_field_value(obj, std::forward<F>(fn), indices_{});
-        std::apply([&](const auto&... regs) {
-            (fn(std::string_view(regs.name), obj.*(regs.member)), ...);
-        }, typed_regs_);
     }
 
     // ── Schema-only field iteration ──────────────────────────────────
-    //
-    // Auto-discovered field<> members: callback receives field_descriptor<T, I>.
-    // Hybrid-registered fields: callback receives field_def.
-    // Both expose .name() and .has_meta<M>() / .meta<M>().
 
     template <typename F>
     void for_each_field(F&& fn) const {
         detail::for_each_field_descriptor<T>(std::forward<F>(fn), indices_{});
-        std::apply([&](const auto&... regs) {
-            ((void)[&] {
-                detail::dynamic_field_def temp{
-                    regs.name,
-                    typeid(std::remove_reference_t<
-                        decltype(std::declval<T>().*(regs.member))>),
-                    {}, false, regs.metas, {}, {}};
-                fn(field_def(&temp));
-            }(), ...);
-        }, typed_regs_);
     }
 
     // ── Meta iteration ───────────────────────────────────────────────
@@ -245,42 +152,18 @@ public:
     void get(T& obj, std::string_view fname, F&& fn) const {
         if (detail::get_field_by_name(obj, fname, std::forward<F>(fn), field_indices_{}))
             return;
-        bool found = false;
-        std::apply([&](const auto&... regs) {
-            ((regs.name == fname && !found &&
-                (fn(std::string_view(regs.name), obj.*(regs.member)),
-                 found = true, true)), ...);
-        }, typed_regs_);
-        if (!found)
-            throw std::logic_error(
-                "type_def '" + std::string(name()) + "': no field named '" +
-                std::string(fname) + "'");
+        throw std::logic_error(
+            "type_def '" + std::string(name()) + "': no field named '" +
+            std::string(fname) + "'");
     }
 
     template <typename F>
     void get(const T& obj, std::string_view fname, F&& fn) const {
-        if (!has_field(fname)) {
-            bool is_hybrid = false;
-            std::apply([&](const auto&... regs) {
-                ((regs.name == fname && (is_hybrid = true, true)), ...);
-            }, typed_regs_);
-            if (!is_hybrid)
-                throw std::logic_error(
-                    "type_def '" + std::string(name()) + "': no field named '" +
-                    std::string(fname) + "'");
-        }
         if (detail::get_field_by_name(obj, fname, std::forward<F>(fn), field_indices_{}))
             return;
-        bool found = false;
-        std::apply([&](const auto&... regs) {
-            ((regs.name == fname && !found &&
-                (fn(std::string_view(regs.name), obj.*(regs.member)),
-                 found = true, true)), ...);
-        }, typed_regs_);
-        if (!found)
-            throw std::logic_error(
-                "type_def '" + std::string(name()) + "': no field named '" +
-                std::string(fname) + "'");
+        throw std::logic_error(
+            "type_def '" + std::string(name()) + "': no field named '" +
+            std::string(fname) + "'");
     }
 
     // ── Get field by runtime name (typed) ────────────────────────────
@@ -294,19 +177,7 @@ public:
                     result = value;
             }, field_indices_{});
         if (result) return *result;
-        bool name_found = field_found;
-        std::apply([&](const auto&... regs) {
-            ((regs.name == fname && !result.has_value() && [&] {
-                name_found = true;
-                using MemT = std::remove_reference_t<
-                    decltype(std::declval<T>().*(regs.member))>;
-                if constexpr (std::is_same_v<MemT, V>)
-                    result = obj.*(regs.member);
-                return true;
-            }()), ...);
-        }, typed_regs_);
-        if (result) return *result;
-        if (name_found)
+        if (field_found)
             throw std::logic_error(
                 "type_def '" + std::string(name()) + "': field '" +
                 std::string(fname) + "' type mismatch");
@@ -325,19 +196,6 @@ public:
             obj, fname, std::forward<V>(val), field_indices_{},
             name_matched, set_ok);
         if (set_ok) return;
-        std::apply([&](const auto&... regs) {
-            ((regs.name == fname && !set_ok && [&] {
-                name_matched = true;
-                using MemT = std::remove_reference_t<
-                    decltype(std::declval<T>().*(regs.member))>;
-                if constexpr (std::is_constructible_v<MemT, V>) {
-                    obj.*(regs.member) = MemT(std::forward<V>(val));
-                    set_ok = true;
-                }
-                return true;
-            }()), ...);
-        }, typed_regs_);
-        if (set_ok) return;
         if (name_matched)
             throw std::logic_error(
                 "type_def '" + std::string(name()) + "': field '" +
@@ -354,35 +212,28 @@ public:
 
     bool valid(const T& obj) const {
         bool is_valid = true;
-        // Check auto-discovered field<T> members
-        detail::for_each_raw_field(obj, [&](std::string_view name, const auto& raw_field) {
+        detail::for_each_raw_field(obj, [&](std::string_view name, const auto& raw_member) {
             if (!is_valid) return;
-            if (raw_field.validators) {
-                auto errors = raw_field.validators(raw_field.value, name);
-                if (!errors.empty()) { is_valid = false; return; }
-            }
-            // Recurse into nested reflected structs
-            using InnerType = std::remove_cvref_t<decltype(raw_field.value)>;
-            if constexpr (detail::reflected_struct<InnerType>) {
-                if (!type_def<InnerType>{}.valid(raw_field.value))
-                    is_valid = false;
-            }
-        }, indices_{});
-        if (!is_valid) return false;
-        // Check hybrid-registered members
-        std::apply([&](const auto&... regs) {
-            (([&] {
-                if (!is_valid) return;
-                if (regs.validate_fn) {
-                    auto errors = regs.validate_fn(obj.*(regs.member), regs.name);
-                    if (!errors.empty()) is_valid = false;
+            using RawT = std::remove_cvref_t<decltype(raw_member)>;
+            if constexpr (is_field<RawT>) {
+                if (raw_member.validators) {
+                    auto errors = raw_member.validators(raw_member.value, name);
+                    if (!errors.empty()) { is_valid = false; return; }
                 }
-                if (is_valid && regs.nested_valid_fn) {
-                    if (!regs.nested_valid_fn(obj.*(regs.member)))
+                // Recurse into nested reflected structs
+                using InnerType = std::remove_cvref_t<decltype(raw_member.value)>;
+                if constexpr (detail::reflected_struct<InnerType>) {
+                    if (!type_def<InnerType>{}.valid(raw_member.value))
                         is_valid = false;
                 }
-            }()), ...);
-        }, typed_regs_);
+            } else {
+                // Plain member — recurse if it's a reflected struct
+                if constexpr (detail::reflected_struct<RawT>) {
+                    if (!type_def<RawT>{}.valid(raw_member))
+                        is_valid = false;
+                }
+            }
+        }, indices_{});
         return is_valid;
     }
 
@@ -393,47 +244,36 @@ public:
   private:
     validation_result validate_with_prefix(const T& obj, std::string_view prefix) const {
         validation_result result;
-        // Check auto-discovered field<T> members
-        detail::for_each_raw_field(obj, [&](std::string_view name, const auto& raw_field) {
+        detail::for_each_raw_field(obj, [&](std::string_view name, const auto& raw_member) {
             auto full_path = prefix.empty()
                 ? std::string(name)
                 : std::string(prefix) + "." + std::string(name);
 
-            if (raw_field.validators) {
-                auto errors = raw_field.validators(raw_field.value, full_path);
-                for (auto& error : errors)
-                    result.add(std::move(error));
-            }
-            // Recurse into nested reflected structs
-            using InnerType = std::remove_cvref_t<decltype(raw_field.value)>;
-            if constexpr (detail::reflected_struct<InnerType>) {
-                auto nested_result = type_def<InnerType>{}.validate_with_prefix(
-                    raw_field.value, full_path);
-                for (auto& error : nested_result.errors())
-                    result.add(validation_error{error.path, error.message, error.constraint});
-            }
-        }, indices_{});
-        // Check hybrid-registered members
-        std::apply([&](const auto&... regs) {
-            (([&] {
-                auto full_path = prefix.empty()
-                    ? regs.name
-                    : std::string(prefix) + "." + regs.name;
-
-                if (regs.validate_fn) {
-                    auto errors = regs.validate_fn(obj.*(regs.member), full_path);
+            using RawT = std::remove_cvref_t<decltype(raw_member)>;
+            if constexpr (is_field<RawT>) {
+                if (raw_member.validators) {
+                    auto errors = raw_member.validators(raw_member.value, full_path);
                     for (auto& error : errors)
                         result.add(std::move(error));
                 }
-                if (regs.nested_validate_fn) {
-                    auto nested_result = regs.nested_validate_fn(
-                        obj.*(regs.member), full_path);
+                // Recurse into nested reflected structs
+                using InnerType = std::remove_cvref_t<decltype(raw_member.value)>;
+                if constexpr (detail::reflected_struct<InnerType>) {
+                    auto nested_result = type_def<InnerType>{}.validate_with_prefix(
+                        raw_member.value, full_path);
                     for (auto& error : nested_result.errors())
-                        result.add(validation_error{
-                            error.path, error.message, error.constraint});
+                        result.add(validation_error{error.path, error.message, error.constraint});
                 }
-            }()), ...);
-        }, typed_regs_);
+            } else {
+                // Plain member — recurse if it's a reflected struct
+                if constexpr (detail::reflected_struct<RawT>) {
+                    auto nested_result = type_def<RawT>{}.validate_with_prefix(
+                        raw_member, full_path);
+                    for (auto& error : nested_result.errors())
+                        result.add(validation_error{error.path, error.message, error.constraint});
+                }
+            }
+        }, indices_{});
         return result;
     }
 
@@ -444,10 +284,6 @@ public:
     T create() const { return T{}; }
 
     // ── Parse JSON with reporting ───────────────────────────────────
-    //
-    // Declared here, defined in detail/dynamic_json.hpp (after json.hpp)
-    // so parse can use value_from_json for complex types (enums,
-    // vectors/maps/optionals of reflected structs).
 
     inline parse_result<T> parse(const nlohmann::json& j) const;
     inline parse_result<T> parse(const nlohmann::json& j, parse_options options) const;

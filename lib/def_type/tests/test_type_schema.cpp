@@ -71,10 +71,8 @@ TEST_CASE("type_definition works with dynamic type_def", "[type_definition]") {
     REQUIRE(summary == "Event: title, count");
 }
 
-TEST_CASE("type_definition works with hybrid type_def", "[type_definition]") {
-    auto t = type_def<PlainCat>()
-        .field(&PlainCat::name, "name")
-        .field(&PlainCat::age, "age");
+TEST_CASE("type_definition works with plain struct type_def", "[type_definition]") {
+    type_def<PlainCat> t;
     auto summary = schema_summary(t);
     REQUIRE(summary == "PlainCat: name, age");
 }
@@ -93,10 +91,9 @@ TEST_CASE("type_definition has_field works generically", "[type_definition]") {
     REQUIRE(check_has(dynamic, "x"));
     REQUIRE(!check_has(dynamic, "nope"));
 
-    auto hybrid = type_def<PlainCat>()
-        .field(&PlainCat::name, "name");
-    REQUIRE(check_has(hybrid, "name"));
-    REQUIRE(!check_has(hybrid, "nope"));
+    type_def<PlainCat> plain;
+    REQUIRE(check_has(plain, "name"));
+    REQUIRE(!check_has(plain, "nope"));
 }
 
 TEST_CASE("type_definition has_meta works generically", "[type_definition]") {

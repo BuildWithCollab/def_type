@@ -197,44 +197,46 @@ type_def<detail::dynamic_tag>::field(
 // for complex types (enums, vectors/maps/optionals of reflected structs)
 // ═══════════════════════════════════════════════════════════════════════
 
-template <typename T, typename... Regs>
-parse_result<T> type_def<T, Regs...>::parse(const nlohmann::json& j) const {
+template <typename T>
+parse_result<T> type_def<T>::parse(const nlohmann::json& j) const {
     if (!j.is_object()) throw std::logic_error("parse: expected JSON object");
 
     parse_result<T> result{.value = T{}};
 
     // Populate using raw field iteration
-    detail::for_each_raw_field(result.value, [&](std::string_view name, auto& raw_field) {
+    detail::for_each_raw_field(result.value, [&](std::string_view name, auto& raw_member) {
         std::string key(name);
         if (j.contains(key)) {
-            using InnerType = std::remove_cvref_t<decltype(raw_field.value)>;
-            if constexpr (detail::reflected_struct<InnerType>) {
-                // Nested struct — recurse via parse so each inner field
-                // gets its own try-catch (graceful per-field defaults)
-                if (j[key].is_object()) {
-                    auto nested_result = type_def<InnerType>{}.parse(j[key]);
-                    raw_field.value = std::move(nested_result.value);
+            using RawT = std::remove_cvref_t<decltype(raw_member)>;
+            if constexpr (is_field<RawT>) {
+                using InnerType = std::remove_cvref_t<decltype(raw_member.value)>;
+                if constexpr (detail::reflected_struct<InnerType>) {
+                    if (j[key].is_object()) {
+                        auto nested_result = type_def<InnerType>{}.parse(j[key]);
+                        raw_member.value = std::move(nested_result.value);
+                    }
+                } else {
+                    try {
+                        detail::value_from_json(j[key], raw_member.value);
+                    } catch (...) {
+                        // Type mismatch — keep default
+                    }
                 }
             } else {
-                try {
-                    detail::value_from_json(j[key], raw_field.value);
-                } catch (...) {
-                    // Type mismatch — keep default
+                // Plain member
+                if constexpr (detail::reflected_struct<RawT>) {
+                    if (j[key].is_object()) {
+                        auto nested_result = type_def<RawT>{}.parse(j[key]);
+                        raw_member = std::move(nested_result.value);
+                    }
+                } else {
+                    try {
+                        detail::value_from_json(j[key], raw_member);
+                    } catch (...) {}
                 }
             }
         }
     }, indices_{});
-
-    // Also populate hybrid-registered fields via value_from_json
-    std::apply([&](const auto&... regs) {
-        (([&] {
-            if (j.contains(regs.name)) {
-                try {
-                    detail::value_from_json(j[regs.name], result.value.*(regs.member));
-                } catch (...) {}
-            }
-        }()), ...);
-    }, typed_regs_);
 
     // Extra keys
     auto schema_names_vec = field_names();
@@ -261,8 +263,8 @@ parse_result<T> type_def<T, Regs...>::parse(const nlohmann::json& j) const {
     return result;
 }
 
-template <typename T, typename... Regs>
-parse_result<T> type_def<T, Regs...>::parse(
+template <typename T>
+parse_result<T> type_def<T>::parse(
         const nlohmann::json& j, parse_options options) const {
     if (options.strict) {
         options.reject_extra_keys = true;

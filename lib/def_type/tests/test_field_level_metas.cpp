@@ -24,36 +24,6 @@ TEST_CASE("typed: for_each_field detects field-level metas", "[type_def][typed][
     REQUIRE(found_limit_render);
 }
 
-TEST_CASE("hybrid: for_each_field detects field-level metas", "[type_def][hybrid][field_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name",
-            with<help_info>({.summary = "Dog's name"}))
-        .field(&PlainDog::age, "age",
-            with<render_meta>({.render = {.style = "bold", .width = 5}}))
-        .field(&PlainDog::breed, "breed");
-
-    bool name_has_help = false;
-    bool age_has_render = false;
-    bool breed_has_help = false;
-    bool breed_has_render = false;
-
-    t.for_each_field([&](auto descriptor) {
-        if (descriptor.name() == "name")
-            name_has_help = descriptor.template has_meta<help_info>();
-        if (descriptor.name() == "age")
-            age_has_render = descriptor.template has_meta<render_meta>();
-        if (descriptor.name() == "breed") {
-            breed_has_help = descriptor.template has_meta<help_info>();
-            breed_has_render = descriptor.template has_meta<render_meta>();
-        }
-    });
-
-    REQUIRE(name_has_help);
-    REQUIRE(age_has_render);
-    REQUIRE(!breed_has_help);
-    REQUIRE(!breed_has_render);
-}
-
 TEST_CASE("dynamic: for_each_field detects field-level metas", "[type_def][dynamic][field_meta]") {
     auto t = type_def("CLI")
         .field<std::string>("query")
@@ -106,15 +76,6 @@ TEST_CASE("typed: field() without meta via field_def", "[type_def][typed][field_
     REQUIRE(!fv.has_meta<render_meta>());
 }
 
-TEST_CASE("hybrid: field with meta", "[type_def][hybrid][field_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name",
-            with<help_info>({.summary = "Dog's name"}));
-
-    REQUIRE(t.field("name").has_meta<help_info>());
-    REQUIRE(std::string_view{t.field("name").meta<help_info>().summary} == "Dog's name");
-}
-
 TEST_CASE("dynamic: field with single meta", "[type_def][dynamic][field_meta]") {
     auto t = type_def("CLI")
         .field<bool>("verbose", false,
@@ -127,19 +88,6 @@ TEST_CASE("dynamic: field with single meta", "[type_def][dynamic][field_meta]") 
 // ═════════════════════════════════════════════════════════════════════════
 // Field with multiple metas
 // ═════════════════════════════════════════════════════════════════════════
-
-TEST_CASE("hybrid: field with multiple metas", "[type_def][hybrid][field_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::age, "age",
-            with<help_info>({.summary = "Age in years"}),
-            with<render_meta>({.render = {.style = "bold", .width = 5}}));
-
-    REQUIRE(t.field("age").has_meta<help_info>());
-    REQUIRE(t.field("age").has_meta<render_meta>());
-    REQUIRE(std::string_view{t.field("age").meta<help_info>().summary} == "Age in years");
-    REQUIRE(std::string_view{t.field("age").meta<render_meta>().render.style} == "bold");
-    REQUIRE(t.field("age").meta<render_meta>().render.width == 5);
-}
 
 TEST_CASE("dynamic: field with multiple metas", "[type_def][dynamic][field_meta]") {
     auto t = type_def("CLI")
@@ -168,13 +116,6 @@ TEST_CASE("typed: for_each_field — query has no meta", "[type_def][typed][fiel
     });
 
     REQUIRE(!query_has_cli);
-}
-
-TEST_CASE("hybrid: field without meta", "[type_def][hybrid][field_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
-
-    REQUIRE(!t.field("name").has_meta<help_info>());
 }
 
 TEST_CASE("dynamic: field without meta returns false", "[type_def][dynamic][field_meta]") {
@@ -240,19 +181,6 @@ TEST_CASE("typed: field metas<M>() via field_def", "[type_def][typed][field_meta
     REQUIRE(empty.empty());
 }
 
-TEST_CASE("hybrid: field meta_count and metas", "[type_def][hybrid][field_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name",
-            with<tag_info>({.value = "a"}),
-            with<tag_info>({.value = "b"}));
-
-    REQUIRE(t.field("name").meta_count<tag_info>() == 2);
-    auto tags = t.field("name").metas<tag_info>();
-    REQUIRE(tags.size() == 2);
-    REQUIRE(std::string_view{tags[0].value} == "a");
-    REQUIRE(std::string_view{tags[1].value} == "b");
-}
-
 TEST_CASE("dynamic: field meta_count and metas", "[type_def][dynamic][field_meta]") {
     auto t = type_def("Event")
         .field<std::string>("title", std::string(""),
@@ -264,14 +192,6 @@ TEST_CASE("dynamic: field meta_count and metas", "[type_def][dynamic][field_meta
     REQUIRE(tags.size() == 2);
     REQUIRE(std::string_view{tags[0].value} == "a");
     REQUIRE(std::string_view{tags[1].value} == "b");
-}
-
-TEST_CASE("hybrid: field meta_count for absent meta", "[type_def][hybrid][field_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name",
-            with<help_info>({.summary = "x"}));
-
-    REQUIRE(t.field("name").meta_count<cli_meta>() == 0);
 }
 
 TEST_CASE("dynamic: field meta_count for absent meta", "[type_def][dynamic][field_meta]") {
@@ -327,20 +247,6 @@ TEST_CASE("typed: for_each_field reads meta values via meta<M>()", "[type_def][t
     REQUIRE(verbose_flag == 'v');
 }
 
-TEST_CASE("hybrid: for_each_field reads meta values", "[type_def][hybrid][field_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name",
-            with<help_info>({.summary = "Dog's name"}));
-
-    std::string summary;
-    t.for_each_field([&](auto descriptor) {
-        if (descriptor.name() == "name" && descriptor.template has_meta<help_info>())
-            summary = descriptor.template meta<help_info>().summary;
-    });
-
-    REQUIRE(summary == "Dog's name");
-}
-
 TEST_CASE("dynamic: for_each_field reads meta values", "[type_def][dynamic][field_meta]") {
     auto t = type_def("CLI")
         .field<bool>("verbose", false,
@@ -368,13 +274,6 @@ TEST_CASE("dynamic: field_def meta() throws for absent meta", "[type_def][dynami
 
 TEST_CASE("typed: field_def meta() throws for absent meta", "[type_def][typed][field_meta][throw]") {
     REQUIRE_THROWS_AS(type_def<CliArgs>{}.field("query").meta<cli_meta>(), std::logic_error);
-}
-
-TEST_CASE("hybrid: field_def meta() throws for absent meta", "[type_def][hybrid][field_meta][throw]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
-
-    REQUIRE_THROWS_AS(t.field("name").meta<cli_meta>(), std::logic_error);
 }
 
 TEST_CASE("type_instance: field_def meta() throws for absent meta", "[type_instance][field_meta][throw]") {

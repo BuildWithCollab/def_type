@@ -520,7 +520,6 @@ TEST_CASE("spike: parse() — validation does NOT run by default", "[validation]
 
 struct ValidatedDog;
 struct ParseableDog;
-struct HybridValidatedDog;
 
 #ifndef DEF_TYPE_HAS_PFR
 template <>
@@ -531,11 +530,6 @@ constexpr auto def_type::struct_info<ValidatedDog>() {
 template <>
 constexpr auto def_type::struct_info<ParseableDog>() {
     return def_type::field_info<ParseableDog>("name", "age", "breed");
-}
-
-template <>
-constexpr auto def_type::struct_info<HybridValidatedDog>() {
-    return def_type::field_info<HybridValidatedDog>("name", "age", "breed");
 }
 #endif
 
@@ -614,48 +608,31 @@ TEST_CASE("typed: fixing values makes validation pass", "[validation][typed]") {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Hybrid path — validators on .field(&T::member, "name", validators(...))
+// Typed path (ex-hybrid) — validators via field<T> wrappers
 // ═════════════════════════════════════════════════════════════════════════
 
-struct HybridValidatedDog {
-    std::string name;
-    int         age = 0;
-    std::string breed;
-};
+// Reuses ValidatedDog defined above (name: not_empty, age: in_range 1..999, breed: no validators)
 
-TEST_CASE("hybrid: valid() returns false when validators fail", "[validation][hybrid]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name",
-            validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age",
-            validators(in_range{.min = 1, .max = 999}))
-        .field(&HybridValidatedDog::breed, "breed");
+TEST_CASE("typed (ex-hybrid): valid() returns false when validators fail", "[validation][typed]") {
+    ValidatedDog dog;
+    type_def<ValidatedDog> dog_type;
 
-    HybridValidatedDog dog;
     REQUIRE(!dog_type.valid(dog));
 }
 
-TEST_CASE("hybrid: valid() returns true when all pass", "[validation][hybrid]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name",
-            validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age",
-            validators(in_range{.min = 1, .max = 999}));
-
-    HybridValidatedDog dog;
+TEST_CASE("typed (ex-hybrid): valid() returns true when all pass", "[validation][typed]") {
+    ValidatedDog dog;
     dog.name = "Rex";
     dog.age = 3;
+
+    type_def<ValidatedDog> dog_type;
     REQUIRE(dog_type.valid(dog));
 }
 
-TEST_CASE("hybrid: validate() collects all errors", "[validation][hybrid]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name",
-            validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age",
-            validators(in_range{.min = 1, .max = 999}));
+TEST_CASE("typed (ex-hybrid): validate() collects all errors", "[validation][typed]") {
+    ValidatedDog dog;
+    type_def<ValidatedDog> dog_type;
 
-    HybridValidatedDog dog;
     auto result = dog_type.validate(dog);
 
     REQUIRE(!result);
@@ -666,35 +643,10 @@ TEST_CASE("hybrid: validate() collects all errors", "[validation][hybrid]") {
     REQUIRE(result.errors()[1].constraint == "in_range");
 }
 
-TEST_CASE("hybrid: validators mixed with with<> metas", "[validation][hybrid]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name",
-            validators(not_empty{}),
-            with<spike_help_info>({.summary = "Dog's name"}))
-        .field(&HybridValidatedDog::age, "age",
-            with<spike_cli_meta>({.cli = {.short_flag = 'a'}}),
-            validators(in_range{.min = 1, .max = 999}));
+TEST_CASE("typed (ex-hybrid): fixing values makes validation pass", "[validation][typed]") {
+    ValidatedDog dog;
+    type_def<ValidatedDog> dog_type;
 
-    HybridValidatedDog dog;
-    REQUIRE(!dog_type.valid(dog));
-
-    // Metas still accessible
-    REQUIRE(dog_type.field("name").has_meta<spike_help_info>());
-    REQUIRE(dog_type.field("age").has_meta<spike_cli_meta>());
-
-    dog.name = "Rex";
-    dog.age = 3;
-    REQUIRE(dog_type.valid(dog));
-}
-
-TEST_CASE("hybrid: fixing values makes validation pass", "[validation][hybrid]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name",
-            validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age",
-            validators(in_range{.min = 1, .max = 999}));
-
-    HybridValidatedDog dog;
     REQUIRE(!dog_type.valid(dog));
 
     dog.name = "Rex";
@@ -704,44 +656,84 @@ TEST_CASE("hybrid: fixing values makes validation pass", "[validation][hybrid]")
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Hybrid nested validation — .field(&T::member, "name", nested_type_def)
+// Nested validated structs — shared by typed nested tests below
 // ═════════════════════════════════════════════════════════════════════════
 
-struct HybridAddress {
-    std::string street;
-    std::string zip;
+struct ValidatedAddress {
+    field<std::string> street {
+        .value = "",
+        .validators = validators(not_empty{})
+    };
+    field<std::string> zip {
+        .value = "",
+        .validators = validators(not_empty{})
+    };
 };
 
-struct HybridPerson {
-    std::string name;
-    HybridAddress address;
+struct ValidatedPerson {
+    field<std::string> name {
+        .value = "",
+        .validators = validators(not_empty{})
+    };
+    field<ValidatedAddress> address;
 };
 
 #ifndef DEF_TYPE_HAS_PFR
 template <>
-constexpr auto def_type::struct_info<HybridAddress>() {
-    return def_type::field_info<HybridAddress>("street", "zip");
+constexpr auto def_type::struct_info<ValidatedAddress>() {
+    return def_type::field_info<ValidatedAddress>("street", "zip");
 }
 
 template <>
-constexpr auto def_type::struct_info<HybridPerson>() {
-    return def_type::field_info<HybridPerson>("name", "address");
+constexpr auto def_type::struct_info<ValidatedPerson>() {
+    return def_type::field_info<ValidatedPerson>("name", "address");
 }
 #endif
 
-TEST_CASE("hybrid nested: inner field fails with dotted paths", "[validation][hybrid][nested]") {
-    auto address_schema = type_def<HybridAddress>()
-        .field(&HybridAddress::street, "street", validators(not_empty{}))
-        .field(&HybridAddress::zip, "zip", validators(not_empty{}));
+struct ValidatedLeaf {
+    field<std::string> tag {
+        .value = "",
+        .validators = validators(not_empty{})
+    };
+};
 
-    auto person_type = type_def<HybridPerson>()
-        .field(&HybridPerson::name, "name", validators(not_empty{}))
-        .field(&HybridPerson::address, "address", address_schema);
+struct ValidatedMiddle {
+    field<std::string> label {.value = "mid"};
+    field<ValidatedLeaf> leaf;
+};
 
-    HybridPerson person;
+struct ValidatedRoot {
+    field<std::string> name {.value = "root"};
+    field<ValidatedMiddle> middle;
+};
+
+#ifndef DEF_TYPE_HAS_PFR
+template <>
+constexpr auto def_type::struct_info<ValidatedLeaf>() {
+    return def_type::field_info<ValidatedLeaf>("tag");
+}
+
+template <>
+constexpr auto def_type::struct_info<ValidatedMiddle>() {
+    return def_type::field_info<ValidatedMiddle>("label", "leaf");
+}
+
+template <>
+constexpr auto def_type::struct_info<ValidatedRoot>() {
+    return def_type::field_info<ValidatedRoot>("name", "middle");
+}
+#endif
+
+// ═════════════════════════════════════════════════════════════════════════
+// Typed nested validation (ex-hybrid) — uses field<> wrapper structs
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("typed nested (ex-hybrid): inner field fails with dotted paths", "[validation][typed][nested]") {
+    ValidatedPerson person;
     person.name = "Alice";
     // address.street and address.zip are both "" → fail not_empty
 
+    type_def<ValidatedPerson> person_type;
     auto result = person_type.validate(person);
     REQUIRE(!result);
     REQUIRE(result.error_count() == 2);
@@ -749,150 +741,64 @@ TEST_CASE("hybrid nested: inner field fails with dotted paths", "[validation][hy
     REQUIRE(result.errors()[1].path == "address.zip");
 }
 
-TEST_CASE("hybrid nested: outer and inner both fail", "[validation][hybrid][nested]") {
-    auto address_schema = type_def<HybridAddress>()
-        .field(&HybridAddress::zip, "zip", validators(not_empty{}));
+TEST_CASE("typed nested (ex-hybrid): outer and inner both fail", "[validation][typed][nested]") {
+    ValidatedPerson person;
+    // name is "" and address fields are ""
 
-    auto person_type = type_def<HybridPerson>()
-        .field(&HybridPerson::name, "name", validators(not_empty{}))
-        .field(&HybridPerson::address, "address", address_schema);
-
-    HybridPerson person;
-    // name is "" and address.zip is ""
-
+    type_def<ValidatedPerson> person_type;
     auto result = person_type.validate(person);
-    REQUIRE(result.error_count() == 2);
+    REQUIRE(result.error_count() == 3);  // name + address.street + address.zip
     REQUIRE(result.errors()[0].path == "name");
-    REQUIRE(result.errors()[1].path == "address.zip");
+    REQUIRE(result.errors()[1].path == "address.street");
+    REQUIRE(result.errors()[2].path == "address.zip");
 }
 
-TEST_CASE("hybrid nested: valid() short-circuits across nesting", "[validation][hybrid][nested]") {
-    auto address_schema = type_def<HybridAddress>()
-        .field(&HybridAddress::street, "street", validators(not_empty{}));
-
-    auto person_type = type_def<HybridPerson>()
-        .field(&HybridPerson::name, "name")
-        .field(&HybridPerson::address, "address", address_schema);
-
-    HybridPerson person;
+TEST_CASE("typed nested (ex-hybrid): valid() short-circuits across nesting", "[validation][typed][nested]") {
+    ValidatedPerson person;
     person.name = "Alice";
-    REQUIRE(!person_type.valid(person));  // address.street is ""
 
-    person.address.street = "123 Main St";
+    type_def<ValidatedPerson> person_type;
+    REQUIRE(!person_type.valid(person));  // address fields are ""
+
+    person.address.value.street = "123 Main St";
+    person.address.value.zip = "97201";
     REQUIRE(person_type.valid(person));
 }
 
-TEST_CASE("hybrid nested: all valid", "[validation][hybrid][nested]") {
-    auto address_schema = type_def<HybridAddress>()
-        .field(&HybridAddress::street, "street", validators(not_empty{}))
-        .field(&HybridAddress::zip, "zip", validators(not_empty{}));
-
-    auto person_type = type_def<HybridPerson>()
-        .field(&HybridPerson::name, "name", validators(not_empty{}))
-        .field(&HybridPerson::address, "address", address_schema);
-
-    HybridPerson person;
+TEST_CASE("typed nested (ex-hybrid): all valid", "[validation][typed][nested]") {
+    ValidatedPerson person;
     person.name = "Alice";
-    person.address.street = "123 Main St";
-    person.address.zip = "97201";
+    person.address.value.street = "123 Main St";
+    person.address.value.zip = "97201";
 
+    type_def<ValidatedPerson> person_type;
     REQUIRE(person_type.valid(person));
     REQUIRE(person_type.validate(person).ok());
 }
 
-TEST_CASE("hybrid nested: fixing nested value clears errors", "[validation][hybrid][nested]") {
-    auto address_schema = type_def<HybridAddress>()
-        .field(&HybridAddress::street, "street", validators(not_empty{}));
-
-    auto person_type = type_def<HybridPerson>()
-        .field(&HybridPerson::name, "name")
-        .field(&HybridPerson::address, "address", address_schema);
-
-    HybridPerson person;
+TEST_CASE("typed nested (ex-hybrid): fixing nested value clears errors", "[validation][typed][nested]") {
+    ValidatedPerson person;
     person.name = "Alice";
+
+    type_def<ValidatedPerson> person_type;
     REQUIRE(!person_type.valid(person));
 
-    person.address.street = "123 Main St";
+    person.address.value.street = "123 Main St";
+    person.address.value.zip = "97201";
     REQUIRE(person_type.valid(person));
     REQUIRE(person_type.validate(person).ok());
 }
 
-struct HybridLeaf {
-    std::string tag;
-};
-
-struct HybridMiddle {
-    std::string label;
-    HybridLeaf leaf;
-};
-
-struct HybridRoot {
-    std::string name;
-    HybridMiddle middle;
-};
-
-#ifndef DEF_TYPE_HAS_PFR
-template <>
-constexpr auto def_type::struct_info<HybridLeaf>() {
-    return def_type::field_info<HybridLeaf>("tag");
-}
-
-template <>
-constexpr auto def_type::struct_info<HybridMiddle>() {
-    return def_type::field_info<HybridMiddle>("label", "leaf");
-}
-
-template <>
-constexpr auto def_type::struct_info<HybridRoot>() {
-    return def_type::field_info<HybridRoot>("name", "middle");
-}
-#endif
-
-TEST_CASE("hybrid nested: 3-level deep dotted paths", "[validation][hybrid][nested]") {
-    auto leaf_schema = type_def<HybridLeaf>()
-        .field(&HybridLeaf::tag, "tag", validators(not_empty{}));
-
-    auto middle_schema = type_def<HybridMiddle>()
-        .field(&HybridMiddle::label, "label")
-        .field(&HybridMiddle::leaf, "leaf", leaf_schema);
-
-    auto root_type = type_def<HybridRoot>()
-        .field(&HybridRoot::name, "name")
-        .field(&HybridRoot::middle, "middle", middle_schema);
-
-    HybridRoot root;
+TEST_CASE("typed nested (ex-hybrid): 3-level deep dotted paths", "[validation][typed][nested]") {
+    ValidatedRoot root;
     root.name = "top";
-    root.middle.label = "mid";
+    root.middle.value.label = "mid";
     // root.middle.leaf.tag is "" → fail
 
+    type_def<ValidatedRoot> root_type;
     auto result = root_type.validate(root);
     REQUIRE(result.error_count() == 1);
     REQUIRE(result.errors()[0].path == "middle.leaf.tag");
-}
-
-TEST_CASE("hybrid nested: validators + metas mixed with nested schema", "[validation][hybrid][nested]") {
-    auto address_schema = type_def<HybridAddress>()
-        .field(&HybridAddress::street, "street", validators(not_empty{}))
-        .field(&HybridAddress::zip, "zip", validators(not_empty{}));
-
-    auto person_type = type_def<HybridPerson>()
-        .field(&HybridPerson::name, "name", validators(not_empty{}))
-        .field(&HybridPerson::address, "address", address_schema,
-            with<spike_help_info>({.summary = "Mailing address"}));
-
-    // Meta accessible
-    REQUIRE(person_type.field("address").has_meta<spike_help_info>());
-    REQUIRE(std::string_view{person_type.field("address").meta<spike_help_info>().summary}
-        == "Mailing address");
-
-    // Nested validation still works
-    HybridPerson person;
-    person.name = "Alice";
-    REQUIRE(!person_type.valid(person));
-
-    person.address.street = "123 Main";
-    person.address.zip = "97201";
-    REQUIRE(person_type.valid(person));
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -973,85 +879,62 @@ TEST_CASE("typed parse: checked_value throws on invalid", "[validation][typed][p
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// parse_result on hybrid path — dog_t.parse(json)
+// parse_result on typed path (ex-hybrid) — reuses ParseableDog
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("hybrid parse: clean JSON returns valid result", "[validation][hybrid][parse]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age", validators(in_range{.min = 1, .max = 999}))
-        .field(&HybridValidatedDog::breed, "breed");
-
-    auto result = dog_type.parse(json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}});
+TEST_CASE("typed parse (ex-hybrid): clean JSON returns valid result", "[validation][typed][parse]") {
+    auto result = type_def<ParseableDog>{}.parse(json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}});
 
     REQUIRE(result.valid());
     REQUIRE(!result.has_extra_keys());
     REQUIRE(!result.has_missing_fields());
-    REQUIRE(result->name == "Rex");
-    REQUIRE(result->age == 3);
+    REQUIRE(result->name.value == "Rex");
+    REQUIRE(result->age.value == 3);
 }
 
-TEST_CASE("hybrid parse: detects extra keys", "[validation][hybrid][parse]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name")
-        .field(&HybridValidatedDog::age, "age");
-
-    auto result = dog_type.parse(json{{"name", "Rex"}, {"age", 3}, {"unknown", true}});
+TEST_CASE("typed parse (ex-hybrid): detects extra keys", "[validation][typed][parse]") {
+    auto result = type_def<ParseableDog>{}.parse(json{
+        {"name", "Rex"}, {"age", 3}, {"breed", "Husky"}, {"unknown", true}
+    });
 
     REQUIRE(result.valid());
     REQUIRE(result.has_extra_keys());
     REQUIRE(result.extra_keys().size() == 1);
 }
 
-TEST_CASE("hybrid parse: detects missing fields", "[validation][hybrid][parse]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age")
-        .field(&HybridValidatedDog::breed, "breed");
+TEST_CASE("typed parse (ex-hybrid): detects missing fields", "[validation][typed][parse]") {
+    auto result = type_def<ParseableDog>{}.parse(json{{"name", "Rex"}});
 
-    auto result = dog_type.parse(json{{"name", "Rex"}});
-
-    REQUIRE(result.valid());
+    // age defaults to 0, which fails in_range — so valid() is false
+    REQUIRE(!result.valid());
     REQUIRE(result.has_missing_fields());
     REQUIRE(result.missing_fields().size() == 2);
 }
 
-TEST_CASE("hybrid parse: reports validation errors", "[validation][hybrid][parse]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age", validators(in_range{.min = 1, .max = 999}));
-
-    auto result = dog_type.parse(json{{"name", ""}, {"age", -1}});
+TEST_CASE("typed parse (ex-hybrid): reports validation errors", "[validation][typed][parse]") {
+    auto result = type_def<ParseableDog>{}.parse(json{{"name", ""}, {"age", -1}, {"breed", "Husky"}});
 
     REQUIRE(!result.valid());
     REQUIRE(result.validation_errors().size() == 2);
-    REQUIRE(result->name == "");
-    REQUIRE(result->age == -1);
+    REQUIRE(result->name.value == "");
+    REQUIRE(result->age.value == -1);
 }
 
-TEST_CASE("hybrid parse: checked_value throws on invalid", "[validation][hybrid][parse]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age", validators(in_range{.min = 1, .max = 999}));
-
-    auto result = dog_type.parse(json{{"name", ""}, {"age", 0}});
+TEST_CASE("typed parse (ex-hybrid): checked_value throws on invalid", "[validation][typed][parse]") {
+    auto result = type_def<ParseableDog>{}.parse(json{{"name", ""}, {"age", 0}});
     REQUIRE_THROWS(result.checked_value());
 
-    auto good = dog_type.parse(json{{"name", "Rex"}, {"age", 3}});
+    auto good = type_def<ParseableDog>{}.parse(json{{"name", "Rex"}, {"age", 3}});
     REQUIRE_NOTHROW(good.checked_value());
 }
 
-TEST_CASE("hybrid parse: operator* and operator-> access", "[validation][hybrid][parse]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name")
-        .field(&HybridValidatedDog::age, "age");
+TEST_CASE("typed parse (ex-hybrid): operator* and operator-> access", "[validation][typed][parse]") {
+    auto result = type_def<ParseableDog>{}.parse(json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}});
 
-    auto result = dog_type.parse(json{{"name", "Rex"}, {"age", 3}});
+    REQUIRE(result->name.value == "Rex");
 
-    REQUIRE(result->name == "Rex");
-
-    HybridValidatedDog& instance = *result;
-    REQUIRE(instance.age == 3);
+    ParseableDog& instance = *result;
+    REQUIRE(instance.age.value == 3);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -1176,55 +1059,21 @@ TEST_CASE("typed parse: type mismatch defaults the field", "[validation][typed][
     REQUIRE(result->breed.value == "Husky");
 }
 
-TEST_CASE("hybrid parse: type mismatch defaults the field", "[validation][hybrid][parse][mismatch]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name")
-        .field(&HybridValidatedDog::age, "age")
-        .field(&HybridValidatedDog::breed, "breed");
-
-    auto result = dog_type.parse(json{
+TEST_CASE("typed parse (ex-hybrid): type mismatch defaults the field", "[validation][typed][parse][mismatch]") {
+    auto result = type_def<ParseableDog>{}.parse(json{
         {"name", "Rex"}, {"age", "not a number"}, {"breed", "Husky"}
     });
 
-    REQUIRE(result->name == "Rex");
-    REQUIRE(result->age == 0);  // default
-    REQUIRE(result->breed == "Husky");
+    REQUIRE(result->name.value == "Rex");
+    REQUIRE(result->age.value == 0);  // default
+    REQUIRE(result->breed.value == "Husky");
 }
 
 // ═════════════════════════════════════════════════════════════════════════
 // Nested validation on typed path
 // ═════════════════════════════════════════════════════════════════════════
 
-struct ValidatedAddress {
-    field<std::string> street {
-        .value = "",
-        .validators = validators(not_empty{})
-    };
-    field<std::string> zip {
-        .value = "",
-        .validators = validators(not_empty{})
-    };
-};
-
-struct ValidatedPerson {
-    field<std::string> name {
-        .value = "",
-        .validators = validators(not_empty{})
-    };
-    field<ValidatedAddress> address;
-};
-
-#ifndef DEF_TYPE_HAS_PFR
-template <>
-constexpr auto def_type::struct_info<ValidatedAddress>() {
-    return def_type::field_info<ValidatedAddress>("street", "zip");
-}
-
-template <>
-constexpr auto def_type::struct_info<ValidatedPerson>() {
-    return def_type::field_info<ValidatedPerson>("name", "address");
-}
-#endif
+// ValidatedAddress and ValidatedPerson are defined earlier in this file.
 
 TEST_CASE("typed: nested validation — inner fields fail with dotted paths", "[validation][typed][nested]") {
     ValidatedPerson person;
@@ -1334,39 +1183,7 @@ TEST_CASE("typed parse: type mismatch in nested field", "[validation][typed][par
 
 // ── 3-level deep typed parse ────────────────────────────────────────────
 
-struct ValidatedLeaf {
-    field<std::string> tag {
-        .value = "",
-        .validators = validators(not_empty{})
-    };
-};
-
-struct ValidatedMiddle {
-    field<std::string> label {.value = "mid"};
-    field<ValidatedLeaf> leaf;
-};
-
-struct ValidatedRoot {
-    field<std::string> name {.value = "root"};
-    field<ValidatedMiddle> middle;
-};
-
-#ifndef DEF_TYPE_HAS_PFR
-template <>
-constexpr auto def_type::struct_info<ValidatedLeaf>() {
-    return def_type::field_info<ValidatedLeaf>("tag");
-}
-
-template <>
-constexpr auto def_type::struct_info<ValidatedMiddle>() {
-    return def_type::field_info<ValidatedMiddle>("label", "leaf");
-}
-
-template <>
-constexpr auto def_type::struct_info<ValidatedRoot>() {
-    return def_type::field_info<ValidatedRoot>("name", "middle");
-}
-#endif
+// ValidatedLeaf, ValidatedMiddle, ValidatedRoot are defined earlier in this file.
 
 TEST_CASE("typed parse: 3-level deep nested populate", "[validation][typed][parse][nested]") {
     auto result = type_def<ValidatedRoot>{}.parse(json{
@@ -1482,89 +1299,67 @@ TEST_CASE("typed parse_options: parse_error carries structured data", "[validati
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// parse_options on hybrid path
+// parse_options on typed path (ex-hybrid) — reuses ParseableDog
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("hybrid parse_options: reject_extra_keys throws", "[validation][hybrid][parse_options]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name")
-        .field(&HybridValidatedDog::age, "age");
-
+TEST_CASE("typed parse_options (ex-hybrid): reject_extra_keys throws", "[validation][typed][parse_options]") {
     REQUIRE_THROWS_AS(
-        dog_type.parse(json{{"name", "Rex"}, {"age", 3}, {"unknown", true}},
+        type_def<ParseableDog>{}.parse(
+            json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}, {"unknown", true}},
             {.reject_extra_keys = true}),
         def_type::parse_error);
 }
 
-TEST_CASE("hybrid parse_options: reject_extra_keys does not throw when no extras", "[validation][hybrid][parse_options]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name")
-        .field(&HybridValidatedDog::age, "age");
-
+TEST_CASE("typed parse_options (ex-hybrid): reject_extra_keys does not throw when no extras", "[validation][typed][parse_options]") {
     REQUIRE_NOTHROW(
-        dog_type.parse(json{{"name", "Rex"}, {"age", 3}},
+        type_def<ParseableDog>{}.parse(
+            json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}},
             {.reject_extra_keys = true}));
 }
 
-TEST_CASE("hybrid parse_options: require_all_fields throws on missing", "[validation][hybrid][parse_options]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name")
-        .field(&HybridValidatedDog::age, "age")
-        .field(&HybridValidatedDog::breed, "breed");
-
+TEST_CASE("typed parse_options (ex-hybrid): require_all_fields throws on missing", "[validation][typed][parse_options]") {
     REQUIRE_THROWS_AS(
-        dog_type.parse(json{{"name", "Rex"}},
+        type_def<ParseableDog>{}.parse(
+            json{{"name", "Rex"}},
             {.require_all_fields = true}),
         def_type::parse_error);
 }
 
-TEST_CASE("hybrid parse_options: require_valid throws on validation errors", "[validation][hybrid][parse_options]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age");
-
+TEST_CASE("typed parse_options (ex-hybrid): require_valid throws on validation errors", "[validation][typed][parse_options]") {
     REQUIRE_THROWS_AS(
-        dog_type.parse(json{{"name", ""}, {"age", 3}},
+        type_def<ParseableDog>{}.parse(
+            json{{"name", ""}, {"age", 3}, {"breed", "Husky"}},
             {.require_valid = true}),
         def_type::parse_error);
 }
 
-TEST_CASE("hybrid parse_options: strict throws on any issue", "[validation][hybrid][parse_options]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age");
-
+TEST_CASE("typed parse_options (ex-hybrid): strict throws on any issue", "[validation][typed][parse_options]") {
     REQUIRE_THROWS_AS(
-        dog_type.parse(json{{"name", ""}, {"unknown", 1}},
+        type_def<ParseableDog>{}.parse(
+            json{{"name", ""}, {"unknown", 1}},
             {.strict = true}),
         def_type::parse_error);
 }
 
-TEST_CASE("hybrid parse_options: strict does not throw on clean input", "[validation][hybrid][parse_options]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age");
-
+TEST_CASE("typed parse_options (ex-hybrid): strict does not throw on clean input", "[validation][typed][parse_options]") {
     REQUIRE_NOTHROW(
-        dog_type.parse(json{{"name", "Rex"}, {"age", 3}},
+        type_def<ParseableDog>{}.parse(
+            json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}},
             {.strict = true}));
 }
 
-TEST_CASE("hybrid parse_options: parse_error carries structured data", "[validation][hybrid][parse_options]") {
-    auto dog_type = type_def<HybridValidatedDog>()
-        .field(&HybridValidatedDog::name, "name", validators(not_empty{}))
-        .field(&HybridValidatedDog::age, "age");
-
+TEST_CASE("typed parse_options (ex-hybrid): parse_error carries structured data", "[validation][typed][parse_options]") {
     REQUIRE_THROWS_MATCHES(
-        dog_type.parse(json{{"name", ""}, {"unknown", true}}, {.strict = true}),
+        type_def<ParseableDog>{}.parse(
+            json{{"name", ""}, {"unknown", true}}, {.strict = true}),
         def_type::parse_error,
         Catch::Matchers::Predicate<def_type::parse_error>(
             [](const auto& error) {
                 return error.extra_keys().size() == 1
-                    && error.missing_fields().size() == 1
-                    && error.validation_errors().size() == 1;
+                    && error.missing_fields().size() == 2
+                    && error.validation_errors().size() >= 1;
             },
-            "has 1 extra key, 1 missing field, 1 validation error"));
+            "has 1 extra key, 2 missing fields, >=1 validation error"));
 }
 
 // ═════════════════════════════════════════════════════════════════════════

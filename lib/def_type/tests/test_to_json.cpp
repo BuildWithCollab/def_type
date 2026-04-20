@@ -521,7 +521,7 @@ TEST_CASE("dynamic to_json: int64 and uint64", "[to_json][dynamic][numeric]") {
     REQUIRE(j["unsigned_big"] == 18000000000ULL);
 }
 
-TEST_CASE("typed to_json: mixed struct skips non-field members", "[to_json][typed][mixed]") {
+TEST_CASE("typed to_json: mixed struct includes all non-meta members", "[to_json][typed][mixed]") {
     MixedStruct ms;
     ms.visible = "hello";
     ms.internal_counter = 999;
@@ -529,10 +529,10 @@ TEST_CASE("typed to_json: mixed struct skips non-field members", "[to_json][type
 
     auto j = to_json(ms);
 
-    REQUIRE(j.size() == 2);
+    REQUIRE(j.size() == 3);
     REQUIRE(j["visible"] == "hello");
     REQUIRE(j["score"] == 42);
-    REQUIRE(!j.contains("internal_counter"));
+    REQUIRE(j["internal_counter"] == 999);
 }
 
 TEST_CASE("typed to_json: extensions untouched in output", "[to_json][typed][with]") {
@@ -1143,7 +1143,7 @@ TEST_CASE("hybrid to_json: struct with metas — only fields serialized", "[to_j
     REQUIRE(!j.contains("help"));
 }
 
-TEST_CASE("hybrid to_json: mixed struct skips meta and plain members", "[to_json][hybrid][meta]") {
+TEST_CASE("hybrid to_json: mixed struct includes all non-meta members", "[to_json][hybrid][meta]") {
     HJsonMixed ms;
     ms.label = "hello";
     ms.counter = 999;
@@ -1151,10 +1151,10 @@ TEST_CASE("hybrid to_json: mixed struct skips meta and plain members", "[to_json
 
     auto j = to_json(ms);
 
-    REQUIRE(j.size() == 2);
+    REQUIRE(j.size() == 3);
     REQUIRE(j["label"] == "hello");
     REQUIRE(j["score"] == 42);
-    REQUIRE(!j.contains("counter"));
+    REQUIRE(j["counter"] == 999);
     REQUIRE(!j.contains("help"));
 }
 

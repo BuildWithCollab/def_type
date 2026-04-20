@@ -705,16 +705,16 @@ TEST_CASE("typed from_json: extensions untouched — only value deserialized", "
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Typed from_json — mixed struct (skips non-field members)
+// Typed from_json — mixed struct (all non-meta members deserialized)
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("typed from_json: skips non-field members", "[from_json][typed][mixed]") {
+TEST_CASE("typed from_json: deserializes all non-meta members", "[from_json][typed][mixed]") {
     auto j = json{{"visible", "hello"}, {"score", 42}, {"internal_counter", 999}};
     auto ms = from_json<MixedStruct>(j);
 
     REQUIRE(ms.visible.value == "hello");
     REQUIRE(ms.score.value == 42);
-    REQUIRE(ms.internal_counter == 0);
+    REQUIRE(ms.internal_counter == 999);
 }
 
 // ═════════════════════════════════════════════════════════════════════════

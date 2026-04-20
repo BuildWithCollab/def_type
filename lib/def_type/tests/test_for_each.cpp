@@ -21,11 +21,8 @@ TEST_CASE("typed: for_each_field iterates field<> members with name and value", 
     REQUIRE(collected_names[2] == "active");
 }
 
-TEST_CASE("hybrid: for_each_field() iterates registered fields with typed refs", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::breed, "breed");
+TEST_CASE("hybrid: for_each_field() iterates all non-meta members with typed refs", "[type_def][hybrid][for_each_field]") {
+    type_def<PlainDog> t;
 
     PlainDog rex{"Rex", 3, "Husky"};
 
@@ -83,9 +80,7 @@ TEST_CASE("typed: for_each_field provides access to field values", "[type_def][t
 }
 
 TEST_CASE("hybrid: for_each_field() provides real typed values", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
 
     PlainDog rex{"Rex", 3, "Husky"};
 
@@ -142,14 +137,13 @@ TEST_CASE("typed: for_each_field provides mutable value access", "[type_def][typ
 }
 
 TEST_CASE("hybrid: for_each_field() provides mutable access", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
 
     PlainDog rex{"Rex", 3, "Husky"};
 
     t.for_each_field(rex, [](std::string_view name, auto& value) {
         if constexpr (std::is_same_v<std::remove_cvref_t<decltype(value)>, std::string>) {
-            value = "Buddy";
+            if (name == "name") value = "Buddy";
         }
     });
 
@@ -176,7 +170,7 @@ TEST_CASE("type_instance: for_each_field() provides mutable access via field_val
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// for_each_field skips meta/plain members
+// for_each_field skips meta members, iterates plain members
 // ═══════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("typed: for_each_field skips meta<> members", "[type_def][typed][for_each_field]") {
@@ -215,7 +209,7 @@ TEST_CASE("hybrid: for_each_field(instance) skips meta members", "[type_def][hyb
     }
 }
 
-TEST_CASE("typed: for_each_field skips plain members", "[type_def][typed][for_each_field]") {
+TEST_CASE("typed: for_each_field iterates all non-meta members including plain", "[type_def][typed][for_each_field]") {
     MixedStruct ms;
     ms.label = "hello";
     ms.counter = 999;
@@ -226,9 +220,10 @@ TEST_CASE("typed: for_each_field skips plain members", "[type_def][typed][for_ea
         names.emplace_back(name);
     });
 
-    REQUIRE(names.size() == 2);
+    REQUIRE(names.size() == 3);
     REQUIRE(names[0] == "label");
-    REQUIRE(names[1] == "score");
+    REQUIRE(names[1] == "counter");
+    REQUIRE(names[2] == "score");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -246,14 +241,14 @@ TEST_CASE("typed: for_each_field on meta-only struct calls nothing", "[type_def]
     REQUIRE(count == 0);
 }
 
-TEST_CASE("hybrid: for_each_field on empty hybrid calls nothing", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>();
+TEST_CASE("hybrid: for_each_field iterates all members of plain struct", "[type_def][hybrid][for_each_field]") {
+    type_def<PlainDog> t;
 
     PlainDog rex{"Rex", 3, "Husky"};
 
     int count = 0;
     t.for_each_field(rex, [&](std::string_view, auto&) { ++count; });
-    REQUIRE(count == 0);
+    REQUIRE(count == 3);
 }
 
 TEST_CASE("type_instance: for_each_field() on empty type_def", "[type_instance][for_each_field]") {
@@ -285,9 +280,7 @@ TEST_CASE("typed: for_each_field with const instance", "[type_def][typed][for_ea
 }
 
 TEST_CASE("hybrid: for_each_field() with const instance", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
 
     const PlainDog rex{"Rex", 3, "Husky"};
 
@@ -322,10 +315,7 @@ TEST_CASE("type_instance: for_each_field() with const type_instance", "[type_ins
 // ═══════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("hybrid: for_each_field(instance) count matches field_count()", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::breed, "breed");
+    type_def<PlainDog> t;
 
     PlainDog rex{"Rex", 3, "Husky"};
 
@@ -383,11 +373,8 @@ TEST_CASE("typed: for_each_field iterates field descriptors", "[type_def][typed]
     REQUIRE(indices[2] == 4);
 }
 
-TEST_CASE("hybrid: for_each_field() iterates registered fields", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::breed, "breed");
+TEST_CASE("hybrid: for_each_field() iterates all non-meta members", "[type_def][hybrid][for_each_field]") {
+    type_def<PlainDog> t;
 
     std::vector<std::string> names;
     t.for_each_field([&](auto descriptor) {
@@ -423,15 +410,16 @@ TEST_CASE("dynamic: for_each_field()", "[type_def][dynamic][for_each_field]") {
 // for_each_field skips meta members
 // ═══════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("typed: for_each_field skips meta members", "[type_def][typed][for_each_field]") {
+TEST_CASE("typed: for_each_field skips meta members but includes plain", "[type_def][typed][for_each_field]") {
     std::vector<std::string> names;
     type_def<MixedStruct>{}.for_each_field([&](auto descriptor) {
         names.emplace_back(descriptor.name());
     });
 
-    REQUIRE(names.size() == 2);
+    REQUIRE(names.size() == 3);
     REQUIRE(names[0] == "label");
-    REQUIRE(names[1] == "score");
+    REQUIRE(names[1] == "counter");
+    REQUIRE(names[2] == "score");
 }
 
 TEST_CASE("hybrid: for_each_field skips meta members", "[type_def][hybrid][for_each_field]") {
@@ -477,11 +465,11 @@ TEST_CASE("typed: for_each_field on meta-only struct yields nothing", "[type_def
     REQUIRE(count == 0);
 }
 
-TEST_CASE("hybrid: for_each_field() on empty hybrid yields nothing", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>();
+TEST_CASE("hybrid: for_each_field() on plain struct yields all members", "[type_def][hybrid][for_each_field]") {
+    type_def<PlainDog> t;
     int count = 0;
     t.for_each_field([&](auto) { ++count; });
-    REQUIRE(count == 0);
+    REQUIRE(count == 3);
 }
 
 TEST_CASE("dynamic: for_each_field() empty", "[type_def][dynamic][for_each_field]") {
@@ -530,13 +518,10 @@ TEST_CASE("typed: for_each_field can query field metas", "[type_def][typed][for_
     REQUIRE(!query_has_cli);
 }
 
-TEST_CASE("hybrid: for_each_field() can query field metas", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name",
-            with<help_info>({.summary = "Dog's name"}))
-        .field(&PlainDog::age, "age");
+TEST_CASE("hybrid: for_each_field() can query field metas on auto-discovered members", "[type_def][hybrid][for_each_field]") {
+    type_def<PlainDog> t;
 
-    bool name_has_help = false;
+    bool name_has_help = true;
     bool age_has_help = true;
 
     t.for_each_field([&](auto descriptor) {
@@ -546,7 +531,8 @@ TEST_CASE("hybrid: for_each_field() can query field metas", "[type_def][hybrid][
             age_has_help = descriptor.template has_meta<help_info>();
     });
 
-    REQUIRE(name_has_help);
+    // PlainDog has no field-level metas
+    REQUIRE(!name_has_help);
     REQUIRE(!age_has_help);
 }
 
@@ -601,9 +587,7 @@ TEST_CASE("type_instance: for_each_field() can query field metas via type()", "[
 // ═══════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("hybrid: for_each_field() count matches field_count()", "[type_def][hybrid][for_each_field]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
+    type_def<PlainDog> t;
 
     int visited = 0;
     t.for_each_field([&](auto) { ++visited; });
@@ -713,8 +697,7 @@ TEST_CASE("hybrid: for_each_meta with instance reads from that instance", "[type
 }
 
 TEST_CASE("hybrid: for_each_meta() on plain struct yields nothing", "[type_def][hybrid][for_each_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     int count = 0;
     t.for_each_meta([&](auto&) { ++count; });
     REQUIRE(count == 0);

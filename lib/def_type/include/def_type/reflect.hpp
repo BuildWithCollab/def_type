@@ -7,6 +7,7 @@
 #include <utility>
 
 #include <def_type/field.hpp>
+#include <def_type/meta.hpp>
 #include <def_type/detail/pfr_backend.hpp>
 #include <def_type/detail/registry_backend.hpp>
 
@@ -215,12 +216,12 @@ inline constexpr bool has_pfr_backend = false;
 namespace detail {
 
     template <typename T, std::size_t... Is>
-    consteval bool any_member_is_field(std::index_sequence<Is...>) {
-        return (is_field<member_type<Is, T>> || ...);
+    consteval bool any_member_is_reflectable(std::index_sequence<Is...>) {
+        return (!is_meta<member_type<Is, T>> || ...);
     }
 
     template <typename T>
-    consteval bool has_any_field_member() {
+    consteval bool has_any_reflectable_member() {
         if constexpr (!std::is_aggregate_v<T>) {
             return false;
         } else {
@@ -228,21 +229,21 @@ namespace detail {
             if constexpr (N == 0) {
                 return false;
             } else {
-                return any_member_is_field<T>(std::make_index_sequence<N>{});
+                return any_member_is_reflectable<T>(std::make_index_sequence<N>{});
             }
         }
     }
 
-    // Count only Field<> members (not all struct members)
+    // Count reflectable members (everything except meta<>)
     template <typename T, std::size_t... Is>
     consteval std::size_t count_field_members(std::index_sequence<Is...>) {
-        return (0 + ... + (is_field<member_type<Is, T>> ? 1 : 0));
+        return (0 + ... + (!is_meta<member_type<Is, T>> ? 1 : 0));
     }
 
     template <typename T>
     concept reflected_struct =
         std::is_aggregate_v<T>
-        && has_any_field_member<T>();
+        && has_any_reflectable_member<T>();
 
     template <typename T>
     consteval std::size_t field_count() {
@@ -260,16 +261,16 @@ namespace detail {
 
 namespace detail {
 
-    // Collect only Field member names into an array
+    // Collect reflectable member names into an array (everything except meta<>)
     template <typename T, std::size_t... Is>
     constexpr auto collect_field_names(std::index_sequence<Is...>) {
         constexpr std::size_t total = sizeof...(Is);
-        // First pass: count Field members
-        constexpr std::size_t field_n = (0 + ... + (is_field<member_type<Is, T>> ? 1 : 0));
+        // First pass: count non-meta members
+        constexpr std::size_t field_n = (0 + ... + (!is_meta<member_type<Is, T>> ? 1 : 0));
         // Second pass: collect their names
         std::array<std::string_view, field_n> result{};
         std::size_t idx = 0;
-        ((is_field<member_type<Is, T>>
+        ((!is_meta<member_type<Is, T>>
             ? (result[idx++] = dispatch_field_name_rt<Is, T>(), 0) : 0), ...);
         return result;
     }
@@ -306,7 +307,7 @@ struct field_descriptor {
     template <typename M>
     constexpr M meta() const {
         using member_t = detail::member_type<I, T>;
-        static_assert(is_field<member_t>, "meta<M>() requires a field<> member");
+        static_assert(is_field<member_t>, "meta<M>() requires a field<> member with with<>");
         using with_type = std::remove_cvref_t<decltype(std::declval<member_t>().with)>;
         static_assert(std::is_base_of_v<M, with_type>,
             "meta<M>() called with a meta type not present on this field's with<>");
@@ -315,11 +316,18 @@ struct field_descriptor {
     }
 
     constexpr auto value() const {
+        using member_t = detail::member_type<I, T>;
         T instance{};
-        return detail::dispatch_get_member<I>(instance).value;
+        if constexpr (is_field<member_t>) {
+            return detail::dispatch_get_member<I>(instance).value;
+        } else {
+            return detail::dispatch_get_member<I>(instance);
+        }
     }
 
     constexpr auto with() const {
+        using member_t = detail::member_type<I, T>;
+        static_assert(is_field<member_t>, "with() requires a field<> member");
         T instance{};
         return detail::dispatch_get_member<I>(instance).with;
     }

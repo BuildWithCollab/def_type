@@ -394,7 +394,7 @@ TEST_CASE("to_json with extensions — serializes value, not metadata", "[field]
     REQUIRE(!j.contains("short_flag"));
 }
 
-TEST_CASE("to_json skips non-Field members", "[field][json]") {
+TEST_CASE("to_json includes all non-meta members", "[field][json]") {
     MixedStruct ms;
     ms.visible = "hello";
     ms.internal_counter = 999;
@@ -404,8 +404,8 @@ TEST_CASE("to_json skips non-Field members", "[field][json]") {
 
     REQUIRE(j["visible"] == "hello");
     REQUIRE(j["score"] == 42);
-    REQUIRE(j.size() == 2);
-    REQUIRE(!j.contains("internal_counter"));
+    REQUIRE(j["internal_counter"] == 999);
+    REQUIRE(j.size() == 3);
 }
 
 TEST_CASE("to_json with vector of nested reflected structs", "[field][json]") {

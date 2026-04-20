@@ -64,8 +64,7 @@ TEST_CASE("typed: has_meta() returns false when struct has no metas", "[type_def
 }
 
 TEST_CASE("hybrid: has_meta() returns false when struct has no metas", "[type_def][hybrid][has_meta]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     REQUIRE(!t.has_meta<help_info>());
 }
 
@@ -80,8 +79,7 @@ TEST_CASE("typed: has_meta() works for multi-tagged struct", "[type_def][typed][
 }
 
 TEST_CASE("hybrid: has_meta() works for multi-tagged struct", "[type_def][hybrid][has_meta]") {
-    auto t = type_def<MultiTagDog>()
-        .field(&MultiTagDog::name, "name");
+    type_def<MultiTagDog> t;
     REQUIRE(t.has_meta<tag_info>());
     REQUIRE(!t.has_meta<endpoint_info>());
 }
@@ -167,8 +165,7 @@ TEST_CASE("typed: meta() returns first when multiple of same type", "[type_def][
 }
 
 TEST_CASE("hybrid: meta() returns first when multiple of same type", "[type_def][hybrid][meta]") {
-    auto t = type_def<MultiTagDog>()
-        .field(&MultiTagDog::name, "name");
+    type_def<MultiTagDog> t;
     REQUIRE(std::string_view{t.meta<tag_info>().value} == "pet");
 }
 
@@ -204,14 +201,12 @@ TEST_CASE("hybrid: meta_count()", "[type_def][hybrid][meta_count]") {
 }
 
 TEST_CASE("hybrid: meta_count() is zero for no-meta struct", "[type_def][hybrid][meta_count]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
+    type_def<PlainDog> t;
     REQUIRE(t.meta_count<help_info>() == 0);
 }
 
 TEST_CASE("hybrid: meta_count() for multiple metas of same type", "[type_def][hybrid][meta_count]") {
-    auto t = type_def<MultiTagDog>()
-        .field(&MultiTagDog::name, "name");
+    type_def<MultiTagDog> t;
     REQUIRE(t.meta_count<tag_info>() == 2);
     REQUIRE(t.meta_count<help_info>() == 1);
 }

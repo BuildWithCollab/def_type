@@ -21,6 +21,26 @@
 
 namespace def_type::detail {
 
+    // ── Unwrap helper: field<T> → T& via .value, plain T → T& directly ──
+
+    template <typename MemberT>
+    constexpr auto& unwrap_value(MemberT& member) {
+        if constexpr (def_type::is_field<std::remove_cvref_t<MemberT>>) {
+            return member.value;
+        } else {
+            return member;
+        }
+    }
+
+    template <typename MemberT>
+    struct value_type_of_impl { using type = std::remove_cvref_t<MemberT>; };
+
+    template <typename T, typename W>
+    struct value_type_of_impl<def_type::field<T, W>> { using type = T; };
+
+    template <typename MemberT>
+    using value_type_of = typename value_type_of_impl<std::remove_cvref_t<MemberT>>::type;
+
     // ── Meta counting helpers ───────────────────────────────────────
 
     // Count meta<M> members for a specific M
@@ -91,9 +111,9 @@ namespace def_type::detail {
     constexpr void visit_field_value(Obj& obj, F&& fn) {
         using T = std::remove_cvref_t<Obj>;
         using member_t = def_type::detail::member_type<I, T>;
-        if constexpr (def_type::is_field<member_t>) {
+        if constexpr (!def_type::is_meta<member_t>) {
             auto& member = def_type::detail::dispatch_get_member<I>(obj);
-            fn(def_type::detail::dispatch_field_name_rt<I, T>(), member.value);
+            fn(def_type::detail::dispatch_field_name_rt<I, T>(), unwrap_value(member));
         }
     }
 
@@ -108,7 +128,7 @@ namespace def_type::detail {
     constexpr void visit_raw_field(Obj& obj, F&& fn) {
         using T = std::remove_cvref_t<Obj>;
         using member_t = def_type::detail::member_type<I, T>;
-        if constexpr (def_type::is_field<member_t>) {
+        if constexpr (!def_type::is_meta<member_t>) {
             auto& member = def_type::detail::dispatch_get_member<I>(obj);
             fn(def_type::detail::dispatch_field_name_rt<I, T>(), member);
         }
@@ -124,7 +144,7 @@ namespace def_type::detail {
     template <typename T, std::size_t I, typename F>
     constexpr void visit_field_descriptor(F&& fn) {
         using member_t = def_type::detail::member_type<I, T>;
-        if constexpr (def_type::is_field<member_t>) {
+        if constexpr (!def_type::is_meta<member_t>) {
             fn(def_type::field_descriptor<T, I>{});
         }
     }
@@ -157,10 +177,10 @@ namespace def_type::detail {
         if (found) return;
         using T = std::remove_cvref_t<Obj>;
         using member_t = def_type::detail::member_type<I, T>;
-        // field_indices_ guarantees only field<> member indices arrive here
+        // field_indices_ guarantees only non-meta member indices arrive here
         auto& member = def_type::detail::dispatch_get_member<I>(obj);
         if (def_type::detail::dispatch_field_name_rt<I, T>() == name) {
-            fn(def_type::detail::dispatch_field_name_rt<I, T>(), member.value);
+            fn(def_type::detail::dispatch_field_name_rt<I, T>(), unwrap_value(member));
             found = true;
         }
     }
@@ -181,12 +201,12 @@ namespace def_type::detail {
         if (set_ok) return;
         using T = std::remove_cvref_t<Obj>;
         using member_t = def_type::detail::member_type<I, T>;
-        // field_indices_ guarantees only field<> member indices arrive here
+        // field_indices_ guarantees only non-meta member indices arrive here
         if (def_type::detail::dispatch_field_name_rt<I, T>() == name) {
             name_matched = true;
-            using value_t = typename member_t::value_type;
+            using value_t = value_type_of<member_t>;
             if constexpr (std::is_constructible_v<value_t, V>) {
-                def_type::detail::dispatch_get_member<I>(obj).value =
+                unwrap_value(def_type::detail::dispatch_get_member<I>(obj)) =
                     std::forward<V>(val);
                 set_ok = true;
             }
@@ -294,45 +314,6 @@ namespace def_type::detail {
         }
     }
 
-    // ── Typed hybrid field registration (for type_def<T, Regs...>) ───
-    //
-    // Preserves the real member type MemT in the template parameter so
-    // for_each can give the callback real typed references.
-
-    template <typename T, typename MemT>
-    struct typed_field_reg {
-        MemT T::*               member;
-        std::string             name;
-        std::vector<meta_entry> metas;
-        detail::field_validator_fn<MemT> validate_fn;
-
-        // Nested schema validation — populated when a nested type_def is
-        // passed as an arg to .field(&T::member, "name", nested_type_def).
-        std::function<validation_result(const MemT&, std::string_view)> nested_validate_fn;
-        std::function<bool(const MemT&)>                                nested_valid_fn;
-    };
-
-    // Process a single arg in the hybrid .field() builder:
-    // either a with<> (extract metas) or a validator_pack (store validate_fn)
-    template <typename T, typename MemT, typename Arg>
-    void process_hybrid_field_arg(typed_field_reg<T, MemT>& reg, const Arg& arg) {
-        using ArgType = std::remove_cvref_t<Arg>;
-        if constexpr (is_validator_pack_v<ArgType>) {
-            // Convert validator_pack to detail::field_validator_fn<MemT>
-            reg.validate_fn = static_cast<detail::field_validator_fn<MemT>>(arg);
-        } else {
-            extract_with_metas(reg.metas, arg);
-        }
-    }
-
-    template <typename T, typename MemT, typename... Args>
-    typed_field_reg<T, MemT> make_typed_reg(
-            MemT T::* member, std::string_view fname, Args... args) {
-        typed_field_reg<T, MemT> reg{member, std::string(fname), {}, {}};
-        (process_hybrid_field_arg(reg, args), ...);
-        return reg;
-    }
-
     // ── Build dynamic_field_def from auto-discovered field by name ──
 
     template <std::size_t I, typename TT>
@@ -340,15 +321,17 @@ namespace def_type::detail {
             dynamic_field_def& out, std::string_view target, bool& found) {
         if (found) return;
         using member_t = def_type::detail::member_type<I, TT>;
-        if constexpr (def_type::is_field<member_t>) {
+        if constexpr (!def_type::is_meta<member_t>) {
             if (def_type::detail::dispatch_field_name_rt<I, TT>() == target) {
                 out.name = std::string(target);
-                out.type = typeid(typename member_t::value_type);
+                out.type = typeid(value_type_of<member_t>);
                 out.has_default = false;
                 out.metas.clear();
-                TT instance{};
-                extract_with_metas(out.metas,
-                    def_type::detail::dispatch_get_member<I>(instance).with);
+                if constexpr (def_type::is_field<member_t>) {
+                    TT instance{};
+                    extract_with_metas(out.metas,
+                        def_type::detail::dispatch_get_member<I>(instance).with);
+                }
                 found = true;
             }
         }
@@ -384,7 +367,7 @@ namespace def_type::detail {
     }
 
     template <std::size_t I, typename T>
-    struct is_field_at : std::bool_constant<def_type::is_field<
+    struct is_field_at : std::bool_constant<!def_type::is_meta<
         def_type::detail::member_type<I, T>>> {};
 
 }  // namespace def_type::detail

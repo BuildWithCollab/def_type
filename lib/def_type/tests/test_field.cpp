@@ -264,11 +264,14 @@ TEST_CASE("reflected_struct rejects non-qualifying types", "[field][concept]") {
     STATIC_REQUIRE(!detail::reflected_struct<NonAggregate>);
 
 #ifdef DEF_TYPE_HAS_PFR
-    // EmptyStruct and NoFieldsOnlyPlain are aggregates with no field<>
-    // members. Without PFR, evaluating dispatch_field_count on an
-    // unregistered type hits a static_assert — these checks are only
-    // possible when PFR can introspect arbitrary structs.
+    // EmptyStruct has zero members — not reflectable
     STATIC_REQUIRE(!detail::reflected_struct<EmptyStruct>);
-    STATIC_REQUIRE(!detail::reflected_struct<NoFieldsOnlyPlain>);
+#endif
+}
+
+TEST_CASE("reflected_struct accepts plain-member aggregates", "[field][concept]") {
+#ifdef DEF_TYPE_HAS_PFR
+    // Plain members (no field<>) ARE reflectable — only meta<> is skipped
+    STATIC_REQUIRE(detail::reflected_struct<NoFieldsOnlyPlain>);
 #endif
 }

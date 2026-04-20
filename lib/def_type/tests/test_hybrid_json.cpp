@@ -1,14 +1,12 @@
 #include "test_json_types.hpp"
 
 // ═════════════════════════════════════════════════════════════════════════
-// Hybrid JSON — to_json / from_json for plain structs via type_def<T>
+// Plain-struct JSON — to_json / from_json for plain structs via type_def<T>
 //
-// Plain structs (no field<> members) registered via the hybrid path:
-//   auto dog_type = type_def<PlainDog>()
-//       .field(&PlainDog::name, "name")
-//       .field(&PlainDog::age, "age");
+// Plain structs (no field<> members) auto-discovered via PFR:
+//   type_def<PlainDog> dog_type;
 //
-// Need overloads: to_json(instance, type_def) and from_json<T>(json, type_def)
+// Overloads: to_json(instance, type_def) and from_json<T>(json, type_def)
 // ═════════════════════════════════════════════════════════════════════════
 
 // ── Test types ──────────────────────────────────────────────────────────
@@ -38,14 +36,9 @@ constexpr auto def_type::struct_info<HybridPoint>() {
 }
 #endif
 
-inline auto hybrid_dog_type = type_def<HybridDog>()
-    .field(&HybridDog::name, "name")
-    .field(&HybridDog::age, "age")
-    .field(&HybridDog::breed, "breed");
+inline type_def<HybridDog> hybrid_dog_type;
 
-inline auto hybrid_point_type = type_def<HybridPoint>()
-    .field(&HybridPoint::x, "x")
-    .field(&HybridPoint::y, "y");
+inline type_def<HybridPoint> hybrid_point_type;
 
 // ── to_json with type_def ───────────────────────────────────────────────
 
@@ -83,24 +76,21 @@ TEST_CASE("hybrid json: to_json with type_def — doubles", "[hybrid][to_json][j
     REQUIRE(j["y"] == 2.7);
 }
 
-TEST_CASE("hybrid json: to_json with type_def — only registered fields", "[hybrid][to_json][json]") {
-    // Register only some fields
-    auto partial_type = type_def<HybridDog>()
-        .field(&HybridDog::name, "name")
-        .field(&HybridDog::age, "age");
-    // breed is NOT registered
+TEST_CASE("hybrid json: to_json with type_def — all fields auto-discovered", "[hybrid][to_json][json]") {
+    // Auto-discovery finds ALL struct members
+    type_def<HybridDog> dog_type;
 
     HybridDog rex;
     rex.name = "Rex";
     rex.age = 3;
     rex.breed = "Husky";
 
-    auto j = to_json(rex, partial_type);
+    auto j = to_json(rex, dog_type);
 
-    REQUIRE(j.size() == 2);
+    REQUIRE(j.size() == 3);
     REQUIRE(j["name"] == "Rex");
     REQUIRE(j["age"] == 3);
-    REQUIRE(!j.contains("breed"));
+    REQUIRE(j["breed"] == "Husky");
 }
 
 // ── from_json with type_def ─────────────────────────────────────────────

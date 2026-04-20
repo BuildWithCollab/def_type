@@ -14,21 +14,13 @@ TEST_CASE("typed: name() works for various types", "[type_def][typed][name]") {
     REQUIRE(type_def<SingleField>{}.name() == "SingleField");
 }
 
-TEST_CASE("hybrid: name()", "[type_def][hybrid][name]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
-    REQUIRE(t.name() == "PlainDog");
+TEST_CASE("typed: name() for plain structs", "[type_def][typed][name]") {
+    REQUIRE(type_def<PlainDog>{}.name() == "PlainDog");
 }
 
-TEST_CASE("hybrid: name() works for various types", "[type_def][hybrid][name]") {
-    auto dog = type_def<PlainDog>()
-        .field(&PlainDog::name, "name");
-    REQUIRE(dog.name() == "PlainDog");
-
-    auto point = type_def<PlainPoint>()
-        .field(&PlainPoint::x, "x")
-        .field(&PlainPoint::y, "y");
-    REQUIRE(point.name() == "PlainPoint");
+TEST_CASE("typed: name() works for various plain types", "[type_def][typed][name]") {
+    REQUIRE(type_def<PlainDog>{}.name() == "PlainDog");
+    REQUIRE(type_def<PlainPoint>{}.name() == "PlainPoint");
 }
 
 TEST_CASE("dynamic: name()", "[type_def][dynamic][name]") {
@@ -52,7 +44,7 @@ TEST_CASE("type_instance: name()", "[type_instance][name]") {
 // field_count()
 // ═══════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("typed: field_count() counts only field<> members", "[type_def][typed][field_count]") {
+TEST_CASE("typed: field_count() counts all non-meta members", "[type_def][typed][field_count]") {
     REQUIRE(type_def<SimpleArgs>{}.field_count() == 3);
     REQUIRE(type_def<Dog>{}.field_count() == 3);
     REQUIRE(type_def<SingleField>{}.field_count() == 1);
@@ -63,9 +55,9 @@ TEST_CASE("typed: field_count() excludes meta<> members", "[type_def][typed][fie
     REQUIRE(type_def<Dog>{}.field_count() == 3);
 }
 
-TEST_CASE("typed: field_count() excludes plain members", "[type_def][typed][field_count]") {
-    // MixedStruct has 1 meta + 2 fields + 1 plain = 4 total, 2 are field<>
-    REQUIRE(type_def<MixedStruct>{}.field_count() == 2);
+TEST_CASE("typed: field_count() includes plain members", "[type_def][typed][field_count]") {
+    // MixedStruct has 1 meta + 2 fields + 1 plain = 4 total, 3 are non-meta
+    REQUIRE(type_def<MixedStruct>{}.field_count() == 3);
 }
 
 TEST_CASE("typed: field_count() is zero when struct has only metas", "[type_def][typed][field_count]") {
@@ -77,24 +69,14 @@ TEST_CASE("typed: field_count() for multi-tagged struct", "[type_def][typed][fie
     REQUIRE(type_def<MultiTagged>{}.field_count() == 1);
 }
 
-TEST_CASE("hybrid: field_count() includes registered fields", "[type_def][hybrid][field_count]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::breed, "breed");
-    REQUIRE(t.field_count() == 3);
+TEST_CASE("typed: field_count() auto-discovers all plain struct members", "[type_def][typed][field_count]") {
+    // PlainDog has 3 plain members, all auto-discovered
+    REQUIRE(type_def<PlainDog>{}.field_count() == 3);
 }
 
-TEST_CASE("hybrid: field_count() with zero registered fields", "[type_def][hybrid][field_count]") {
-    auto t = type_def<PlainDog>();
-    REQUIRE(t.field_count() == 0);
-}
-
-TEST_CASE("hybrid: field_count() excludes unregistered members", "[type_def][hybrid][field_count]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
-    REQUIRE(t.field_count() == 2);
+TEST_CASE("typed: field_count() auto-discovers PlainPoint members", "[type_def][typed][field_count]") {
+    // PlainPoint has 2 plain members, all auto-discovered
+    REQUIRE(type_def<PlainPoint>{}.field_count() == 2);
 }
 
 TEST_CASE("dynamic: field_count() with no fields", "[type_def][dynamic][field_count]") {
@@ -127,7 +109,7 @@ TEST_CASE("type_instance: field_count()", "[type_instance][field_count]") {
 // field_names()
 // ═══════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("typed: field_names() returns field<> member names only", "[type_def][typed][field_names]") {
+TEST_CASE("typed: field_names() returns all non-meta member names", "[type_def][typed][field_names]") {
     auto names = type_def<Dog>{}.field_names();
     REQUIRE(names.size() == 3);
     REQUIRE(names[0] == "name");
@@ -135,11 +117,12 @@ TEST_CASE("typed: field_names() returns field<> member names only", "[type_def][
     REQUIRE(names[2] == "breed");
 }
 
-TEST_CASE("typed: field_names() excludes meta and plain members", "[type_def][typed][field_names]") {
+TEST_CASE("typed: field_names() includes plain members, excludes meta", "[type_def][typed][field_names]") {
     auto names = type_def<MixedStruct>{}.field_names();
-    REQUIRE(names.size() == 2);
+    REQUIRE(names.size() == 3);
     REQUIRE(names[0] == "label");
-    REQUIRE(names[1] == "score");
+    REQUIRE(names[1] == "counter");
+    REQUIRE(names[2] == "score");
 }
 
 TEST_CASE("typed: field_names() for simple struct", "[type_def][typed][field_names]") {
@@ -150,31 +133,19 @@ TEST_CASE("typed: field_names() for simple struct", "[type_def][typed][field_nam
     REQUIRE(names[2] == "active");
 }
 
-TEST_CASE("hybrid: field_names() includes registered fields", "[type_def][hybrid][field_names]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age");
-    auto names = t.field_names();
-    REQUIRE(names.size() == 2);
+TEST_CASE("typed: field_names() auto-discovers all plain struct members", "[type_def][typed][field_names]") {
+    auto names = type_def<PlainDog>{}.field_names();
+    REQUIRE(names.size() == 3);
     REQUIRE(names[0] == "name");
     REQUIRE(names[1] == "age");
+    REQUIRE(names[2] == "breed");
 }
 
-TEST_CASE("hybrid: field_names() empty when no fields registered", "[type_def][hybrid][field_names]") {
-    auto t = type_def<PlainDog>();
-    REQUIRE(t.field_names().empty());
-}
-
-TEST_CASE("hybrid: field_names() preserves registration order", "[type_def][hybrid][field_names]") {
-    auto t = type_def<PlainDog>()
-        .field(&PlainDog::breed, "breed")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::name, "name");
-    auto names = t.field_names();
-    REQUIRE(names.size() == 3);
-    REQUIRE(names[0] == "breed");
-    REQUIRE(names[1] == "age");
-    REQUIRE(names[2] == "name");
+TEST_CASE("typed: field_names() auto-discovers PlainPoint members", "[type_def][typed][field_names]") {
+    auto names = type_def<PlainPoint>{}.field_names();
+    REQUIRE(names.size() == 2);
+    REQUIRE(names[0] == "x");
+    REQUIRE(names[1] == "y");
 }
 
 TEST_CASE("dynamic: field_names()", "[type_def][dynamic][field_names]") {
@@ -217,10 +188,10 @@ TEST_CASE("dynamic: field_names() preserves registration order", "[type_def][dyn
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// typed type_def still works without hybrid registration
+// typed type_def with meta+field struct
 // ═══════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("typed: type_def<T> without hybrid still works", "[type_def][hybrid][compat]") {
+TEST_CASE("typed: type_def<T> with meta and field members", "[type_def][typed][compat]") {
     type_def<MetaDog> t;
     REQUIRE(t.field_count() == 2);
     REQUIRE(t.name() == "MetaDog");
@@ -255,15 +226,9 @@ TEST_CASE("typed: two type_def instances behave identically", "[type_def][typed]
     REQUIRE(std::string_view{ep1.method} == std::string_view{ep2.method});
 }
 
-TEST_CASE("hybrid: two type_def instances behave identically", "[type_def][hybrid][stateless]") {
-    auto t1 = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::breed, "breed");
-    auto t2 = type_def<PlainDog>()
-        .field(&PlainDog::name, "name")
-        .field(&PlainDog::age, "age")
-        .field(&PlainDog::breed, "breed");
+TEST_CASE("typed: two type_def instances for plain struct behave identically", "[type_def][typed][stateless]") {
+    type_def<PlainDog> t1;
+    type_def<PlainDog> t2;
 
     REQUIRE(t1.name() == t2.name());
     REQUIRE(t1.field_count() == t2.field_count());
