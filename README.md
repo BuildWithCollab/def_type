@@ -371,7 +371,6 @@ auto t = type_def("Event")
 
 auto f = t.field("attendees");
 f.name();                    // "attendees"
-f.has_default();             // true
 f.default_value<int>();      // 100
 f.has_meta<render_meta>();   // true
 f.meta<render_meta>().render.style;  // "bold"
@@ -489,7 +488,7 @@ type_def<CliArgs>{}.for_each_field([](auto descriptor) {
 // Dynamic — field_def
 event_t.for_each_field([](field_def fd) {
     fd.name();
-    fd.has_default();
+    fd.default_value<int>();    // returns the default
     fd.has_meta<cli_meta>();
 });
 ```
