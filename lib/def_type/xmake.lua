@@ -1,6 +1,6 @@
 target("def_type")
     set_kind("headeronly")
-    add_headerfiles("include/def_type/**.hpp")
+    add_headerfiles("include/(**.hpp)")
     add_includedirs("include", { public = true })
     add_packages("fmt", { public = true })
     add_packages("nlohmann_json", { public = true })
