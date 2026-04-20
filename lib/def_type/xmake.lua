@@ -20,4 +20,11 @@ if get_config("build_tests") then
         add_deps("def_type")
         add_packages("catch2")
         set_rundir("$(projectdir)")
+
+        on_load(function (target)
+            if target:is_plat("wasm") then
+                target:add("cxflags", "-fwasm-exceptions")
+                target:add("ldflags", "-s EXIT_RUNTIME=1", "-fwasm-exceptions")
+            end
+        end)
 end
