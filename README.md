@@ -9,8 +9,9 @@ Define a type once — with fields, metadata, defaults, and constraints — and 
 - [The Problem](#the-problem)
 - [Quick Start](#quick-start)
   - [Let Your Struct Be the Schema](#let-your-struct-be-the-schema)
+  - [Plain Structs — Zero Wrappers](#plain-structs--zero-wrappers)
+  - [When to Use `field<>`](#when-to-use-field)
   - [The Dynamic Path — No Struct Required](#the-dynamic-path--no-struct-required)
-  - [The Hybrid Path — Plain Structs, Registered Fields](#the-hybrid-path--plain-structs-registered-fields)
   - [One Concept to Rule Them All](#one-concept-to-rule-them-all)
 - [Fields](#fields)
   - [`field<T>` — The Transparent Value Wrapper](#fieldt--the-transparent-value-wrapper)
@@ -35,7 +36,6 @@ Define a type once — with fields, metadata, defaults, and constraints — and 
 - [Dynamic Nesting](#dynamic-nesting)
   - [Nested JSON — Dynamic](#nested-json--dynamic)
   - [3-Level Deep Nesting](#3-level-deep-nesting)
-- [Hybrid Nested Schemas](#hybrid-nested-schemas)
 - [Validation](#validation)
   - [Built-in Validators](#built-in-validators)
   - [Dynamic — Validators Without Default Value](#dynamic--validators-without-default-value)
@@ -51,7 +51,7 @@ Define a type once — with fields, metadata, defaults, and constraints — and 
   - [parse_options — Configurable Strictness](#parse_options--configurable-strictness)
   - [parse_error — Structured Exception](#parse_error--structured-exception)
   - [Type Mismatch Handling in Parse](#type-mismatch-handling-in-parse)
-  - [Parse on All Three Paths](#parse-on-all-three-paths)
+  - [Parse on Both Paths](#parse-on-both-paths)
 - [PFR vs Manual Registration](#pfr-vs-manual-registration)
 - [type_instance — Dynamic Runtime Objects](#type_instance--dynamic-runtime-objects)
 - [Safety](#safety)
@@ -152,6 +152,59 @@ t.for_each_field(rex, [](std::string_view name, auto& value) {
 });
 ```
 
+### Plain Structs — Zero Wrappers
+
+Don't want to use `field<>`? You don't have to. Plain structs work out of the box — PFR auto-discovers every member:
+
+```cpp
+struct PlainDog {
+    std::string name;
+    int age = 0;
+    std::string breed;
+};
+
+type_def<PlainDog> t;
+t.name();          // "PlainDog"
+t.field_count();   // 3
+t.field_names();   // ["name", "age", "breed"]
+
+PlainDog buddy;
+t.set(buddy, "name", std::string("Buddy"));
+t.get<std::string>(buddy, "name");    // "Buddy"
+buddy.name;                            // "Buddy"
+
+auto j = to_json(buddy, t);           // {"name": "Buddy", "age": 0, "breed": ""}
+```
+
+No wrappers, no registration, no macros. Just a plain aggregate struct and `type_def<T>{}`.
+
+You can mix plain members and `field<>` members in the same struct. `type_def` discovers them all:
+
+```cpp
+struct MixedDog {
+    std::string name;                    // plain — auto-discovered
+    field<int> age {
+        .value = 0,
+        .validators = validators(in_range{.min = 0, .max = 25})
+    };
+    std::string breed;                   // plain — auto-discovered
+};
+
+type_def<MixedDog> t;
+t.field_count();   // 3 — all members discovered
+t.field_names();   // ["name", "age", "breed"]
+```
+
+### When to Use `field<>`
+
+`field<>` is optional. Use it when you need:
+
+- **Validators** — `.validators = validators(not_empty{}, max_length{50})`
+- **Field-level metadata** — `field<T, with<cli_meta>>` attaches domain-specific metadata
+- **Both** — validators + metas on the same field
+
+If you just want reflection, serialization, and schema queries — plain struct members are all you need.
+
 ### The Dynamic Path — No Struct Required
 
 Define a type entirely at runtime:
@@ -186,42 +239,9 @@ party.type().field_count();        // 3
 party.type().has_meta<endpoint_info>(); // true
 ```
 
-### The Hybrid Path — Plain Structs, Registered Fields
-
-Already have a struct? Don't want to change it? Register fields via member pointers:
-
-```cpp
-struct PlainDog {
-    std::string name;       // plain std::string — not field<>
-    int         age = 0;    // plain int
-    std::string breed;      // plain std::string
-};
-
-auto t = type_def<PlainDog>()
-    .field(&PlainDog::name, "name",
-        with<help_info>({.summary = "Dog's name"}))
-    .field(&PlainDog::age, "age",
-        with<help_info>({.summary = "Age in years"}))
-    .field(&PlainDog::breed, "breed");
-
-// Same API as typed and dynamic:
-t.name();          // "PlainDog"
-t.field_count();   // 3
-t.field_names();   // ["name", "age", "breed"]
-
-PlainDog buddy = t.create();
-t.set(buddy, "name", std::string("Buddy"));
-t.get<std::string>(buddy, "name");    // "Buddy"
-buddy.name;                            // "Buddy" — plain std::string, nothing special
-
-t.for_each_field(buddy, [](std::string_view name, auto& value) {
-    // value is std::string& or int& — the actual struct member
-});
-```
-
 ### One Concept to Rule Them All
 
-All three paths satisfy the `type_definition` concept. Write generic code once:
+Both paths satisfy the `type_definition` concept. Write generic code once:
 
 ```cpp
 std::string schema_summary(const type_definition auto& t) {
@@ -235,9 +255,9 @@ std::string schema_summary(const type_definition auto& t) {
 }
 
 // Works with any path:
-schema_summary(type_def<Dog>{});           // "Dog: name, age, breed"
+schema_summary(type_def<Dog>{});           // "Dog: name, breed, age"
+schema_summary(type_def<PlainDog>{});      // "PlainDog: name, age, breed"
 schema_summary(event_t);                    // "Event: title, attendees, verbose"
-schema_summary(t);                          // "PlainDog: name, age, breed"
 ```
 
 ---
@@ -272,7 +292,7 @@ struct Weather {
 Weather weather{};  // city is "", days is 7
 ```
 
-`field<T>` is used in the typed path. The hybrid path uses plain struct members. The dynamic path stores values internally.
+`field<T>` is optional — use it in the typed path when you need validators or field-level metadata. Plain struct members work too. The dynamic path stores values internally.
 
 ### Supported Field Types
 
@@ -317,19 +337,6 @@ struct CliArgs {
 type_def<CliArgs>{}.field("verbose").has_meta<cli_meta>();              // true
 type_def<CliArgs>{}.field("verbose").meta<cli_meta>().cli.short_flag;   // 'v'
 type_def<CliArgs>{}.field("limit").meta_count<cli_meta>();              // 1
-```
-
-**Hybrid path** — metadata attached at registration:
-```cpp
-auto t = type_def<PlainDog>()
-    .field(&PlainDog::name, "name",
-        with<help_info>({.summary = "Dog's name"}))
-    .field(&PlainDog::age, "age",
-        with<help_info>({.summary = "Age in years"}),
-        with<render_meta>({.render = {.style = "bold"}}));
-
-t.field("name").meta<help_info>().summary;   // "Dog's name"
-t.field("age").meta<render_meta>().render.style;  // "bold"
 ```
 
 **Dynamic path** — same `with<M>({...})` syntax:
@@ -395,12 +402,12 @@ auto all = t.metas<tag_info>();      // vector of all
 
 ## Querying the Schema
 
-Every `type_def` — typed, hybrid, or dynamic — gives you:
+Every `type_def` — typed or dynamic — gives you:
 
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `name()` | `string_view` | Type name |
-| `field_count()` | `size_t` | Number of fields (excludes metas/plain members) |
+| `field_count()` | `size_t` | Number of fields (excludes metas) |
 | `field_names()` | `vector<string>` | Ordered field names |
 | `has_field(name)` | `bool` | Field exists? |
 | `field(name)` | `field_def` | Field descriptor (throws if not found) |
@@ -445,14 +452,12 @@ t.get<std::string>(rex, "name");    // "Rex"
 t.get<int>(rex, "age");             // 3
 ```
 
-**Hybrid path** — same API, works on plain struct members:
+Works the same way with plain structs — PFR discovers the members automatically:
 
 ```cpp
-auto t = type_def<PlainDog>()
-    .field(&PlainDog::name, "name")
-    .field(&PlainDog::age, "age");
-
+type_def<PlainDog> t;
 PlainDog rex;
+
 t.set(rex, "name", std::string("Rex"));
 t.get<std::string>(rex, "name");    // "Rex"
 rex.name;                            // "Rex" — it's just a plain member
@@ -468,7 +473,7 @@ obj.get<std::string>("title");   // "Dog Party"
 
 ### Callback-Style get()
 
-For typed and hybrid paths, a callback form gives you the typed reference directly:
+For the typed path, a callback form gives you the typed reference directly:
 
 ```cpp
 type_def<Dog> t;
@@ -501,12 +506,12 @@ t.set(rex, "endpoint", 42);          // throws — "endpoint" is a meta, not a f
 
 ### Iterating Fields with Values
 
-**Typed/Hybrid** — you get real typed references:
+**Typed** — you get real typed references:
 
 ```cpp
 type_def<Dog>{}.for_each_field(rex, [](std::string_view name, auto& value) {
     // Visits: name (std::string&), age (int&), breed (std::string&)
-    // Does NOT visit meta<> or plain members
+    // Does NOT visit meta<> members
 });
 ```
 
@@ -570,7 +575,7 @@ t.for_each_meta([](metadata meta_entry) {
 
 ### to_json — Struct to JSON
 
-**Typed path** — any reflected struct (has `field<>` members) can be serialized:
+**Typed path with `field<>` members** — any reflected struct can be serialized:
 
 ```cpp
 Dog rex;
@@ -586,6 +591,24 @@ std::string s = to_json_string(rex);
 
 std::string pretty = to_json_string(rex, 2);
 // pretty-printed with indent=2
+```
+
+**Plain structs** — pass the `type_def` so the framework knows the schema:
+
+```cpp
+struct PlainDog {
+    std::string name;
+    int age = 0;
+    std::string breed;
+};
+
+PlainDog buddy{"Buddy", 3, "Lab"};
+type_def<PlainDog> t;
+
+nlohmann::json j = to_json(buddy, t);
+// {"name": "Buddy", "age": 3, "breed": "Lab"}
+
+std::string s = to_json_string(buddy, t);
 ```
 
 **Dynamic path** — via the type_instance:
@@ -606,31 +629,9 @@ std::string s = obj.to_json_string();
 std::string pretty = obj.to_json_string(2);
 ```
 
-**Hybrid path** — two options:
-
-```cpp
-// Option 1: If the struct has field<> members, to_json works directly
-struct HybridDog {
-    meta<endpoint_info> endpoint{{.path = "/dogs"}};
-    field<std::string> name;
-    field<int> age;
-};
-nlohmann::json j = to_json(HybridDog{.name = "Rex", .age = 3});
-
-// Option 2: Plain struct + type_def — pass both
-struct PlainDog { std::string name; int age; };
-auto dog_t = type_def<PlainDog>()
-    .field(&PlainDog::name, "name")
-    .field(&PlainDog::age, "age");
-
-PlainDog rex{"Rex", 3};
-nlohmann::json j2 = to_json(rex, dog_t);
-std::string s2 = to_json_string(rex, dog_t);
-```
-
 ### from_json — JSON to Struct
 
-**Typed path:**
+**Typed path with `field<>` members:**
 
 ```cpp
 auto j = nlohmann::json{{"name", "Rex"}, {"age", 3}, {"breed", "Husky"}};
@@ -640,6 +641,15 @@ dog.age.value;    // 3
 
 // Or from a JSON string
 auto dog2 = from_json<Dog>(R"({"name": "Buddy", "age": 5, "breed": "Lab"})");
+```
+
+**Plain structs** — PFR discovers the fields, so `from_json<T>` works directly:
+
+```cpp
+auto buddy = from_json<PlainDog>(nlohmann::json{{"name", "Buddy"}, {"age", 5}, {"breed", "Lab"}});
+buddy.name;    // "Buddy"
+buddy.age;     // 5
+buddy.breed;   // "Lab"
 ```
 
 **Dynamic path** — via `create(json)` or `load_json`:
@@ -659,16 +669,6 @@ auto obj2 = t.create();
 obj2.load_json(nlohmann::json{{"age", 5}});
 obj2.get<int>("age");            // 5
 obj2.get<std::string>("name");   // "" (unchanged, kept default)
-```
-
-**Hybrid path:**
-
-```cpp
-// Option 1: struct with field<> members
-auto dog = from_json<Dog>(json{{"name", "Rex"}, {"age", 3}});
-
-// Option 2: plain struct + type_def
-auto dog2 = from_json<PlainDog>(json{{"name", "Rex"}, {"age", 3}}, dog_t);
 ```
 
 ### Complex Types in JSON
@@ -797,45 +797,6 @@ auto j = obj.to_json();
 
 ---
 
-## Hybrid Nested Schemas
-
-The hybrid path can also express nesting by passing a nested `type_def` as an argument to `.field()`:
-
-```cpp
-struct Address {
-    std::string street;
-    std::string zip;
-};
-
-struct Person {
-    std::string name;
-    Address     address;
-};
-
-auto address_schema = type_def<Address>()
-    .field(&Address::street, "street", validators(not_empty{}))
-    .field(&Address::zip, "zip", validators(not_empty{}));
-
-auto person_schema = type_def<Person>()
-    .field(&Person::name, "name", validators(not_empty{}))
-    .field(&Person::address, "address", address_schema);
-```
-
-The nested schema's validation recurses automatically — see [Nested Validation](#nested-validation) below.
-
-You can mix nested schemas with metas:
-
-```cpp
-auto person_schema = type_def<Person>()
-    .field(&Person::name, "name", validators(not_empty{}))
-    .field(&Person::address, "address", address_schema,
-        with<help_info>({.summary = "Mailing address"}));
-
-person_schema.field("address").has_meta<help_info>();   // true
-```
-
----
-
 ## Validation
 
 ### Built-in Validators
@@ -874,11 +835,6 @@ struct Config {
         .validators = validators(in_range{.min = 1, .max = 999})
     };
 };
-
-// Hybrid
-auto config_t = type_def<PlainConfig>()
-    .field(&PlainConfig::token, "token", validators(not_empty{}, max_length{50}))
-    .field(&PlainConfig::retries, "retries", validators(in_range{.min = 1, .max = 999}));
 ```
 
 ### Dynamic — Validators Without Default Value
@@ -934,9 +890,6 @@ dog_t.valid(dog);       // false
 dog.name = "Rex";
 dog.age = 3;
 dog_t.valid(dog);       // true
-
-// Hybrid
-person_schema.valid(person);  // true/false
 ```
 
 ### validate() — Detailed Errors
@@ -1030,26 +983,6 @@ ValidatedPerson person;
 person.name = "Alice";
 auto result = type_def<ValidatedPerson>{}.validate(person);
 // Errors at "address.street" and "address.zip"
-```
-
-**Hybrid nesting** — pass a nested `type_def` to `.field()`:
-
-```cpp
-auto address_schema = type_def<Address>()
-    .field(&Address::street, "street", validators(not_empty{}))
-    .field(&Address::zip, "zip", validators(not_empty{}));
-
-auto person_schema = type_def<Person>()
-    .field(&Person::name, "name", validators(not_empty{}))
-    .field(&Person::address, "address", address_schema);
-
-Person person;
-person.name = "Alice";
-// address.street and address.zip are both "" → fail
-
-auto result = person_schema.validate(person);
-result.errors()[0].path;   // "address.street"
-result.errors()[1].path;   // "address.zip"
 ```
 
 **3-level deep dotted paths** work across all paths:
@@ -1153,7 +1086,7 @@ result->get<std::string>("name");   // "Rex"
 result->get<int>("age");            // 42 — kept default
 ```
 
-### Parse on All Three Paths
+### Parse on Both Paths
 
 ```cpp
 // Dynamic
@@ -1164,20 +1097,13 @@ auto result = type_def("Dog")
 // Typed
 auto result = type_def<Dog>{}.parse(json{{"name", "Rex"}, {"age", 3}});
 result->name.value;  // "Rex"
-
-// Hybrid
-auto dog_t = type_def<PlainDog>()
-    .field(&PlainDog::name, "name", validators(not_empty{}))
-    .field(&PlainDog::age, "age");
-auto result = dog_t.parse(json{{"name", "Rex"}, {"age", 3}});
-result->name;  // "Rex"
 ```
 
 ---
 
 ## PFR vs Manual Registration
 
-def_type uses [PFR (Boost.PFR)](https://github.com/boostorg/pfr) for automatic field name discovery when available. PFR inspects aggregate structs at compile time — no registration needed.
+def_type uses [PFR (Boost.PFR)](https://github.com/boostorg/pfr) for automatic field name discovery when available. PFR inspects aggregate structs at compile time — no registration needed. This is how `type_def<T>` auto-discovers both `field<>` wrapped and plain struct members.
 
 When PFR is **not available** (or for non-aggregate types), you register fields manually via `struct_info<T>()`:
 
@@ -1244,7 +1170,7 @@ b.get<std::string>("title");  // "Party B"
 - **Type mismatch**: `set()` with wrong type throws, value is **not modified**
 - **Empty field name**: throws on all operations
 - **Absent meta**: `meta<M>()` throws on dynamic path when M isn't present
-- **Meta/plain member names**: `set()`, `get()`, `has_field()` correctly ignore non-field members
+- **Meta member names**: `set()`, `get()`, `has_field()` correctly ignore `meta<>` members
 - **Case-sensitive**: `has_field("Name")` is not the same as `has_field("name")`
 
 ```cpp
