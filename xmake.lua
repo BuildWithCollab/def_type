@@ -9,8 +9,6 @@ set_defaultmode("release")
 
 set_languages("c++23")
 
-add_repositories("BuildWithCollab https://github.com/BuildWithCollab/Packages.git")
-
 if is_plat("windows") then
     add_cxxflags("/utf-8", { public = true })
 end

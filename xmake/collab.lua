@@ -25,7 +25,7 @@
 --                              (env var uses dashes — folder names)
 
 -- BuildWithCollab package registry
-add_repositories("BuildWithCollab https://github.com/BuildWithCollab/Packages.git")
+add_repositories("BuildWithCollab https://github.com/BuildWithCollab/Packages")
 
 -- dots → dashes (collab.core → collab-core)
 local function _to_dash(name)
