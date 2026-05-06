@@ -56,8 +56,8 @@ The match is **name-based, not type-based** — coercion across JSON value types
 Use when the alts share a common JSON shape and the type is selected by a key inside the same object.
 
 ```cpp
-struct TextContent  { std::string text; };
-struct ImageContent { std::string url; int width; int height; };
+struct TextContent  { std::string type = "text";  std::string text; };
+struct ImageContent { std::string type = "image"; std::string url; int width; int height; };
 
 using Content = def_type::oneof<"type",
     TextContent,  "text",
@@ -86,10 +86,11 @@ JSON:
 
 **Algorithm.**
 
-- On serialize, the library injects `"type": "<label>"` into the active alt's JSON, where `<label>` is the inline string paired with the alt's type in the `oneof<...>` declaration.
-- On deserialize, the library reads `"type"`, picks the alt whose label matches, and deserializes the rest of the JSON object into that alt (the `"type"` key is ignored during alt deserialization since alt structs do not declare it).
+- The discriminator key (`"type"` here) is a real field on each alt struct — the struct represents the JSON shape exactly. The library never invents or rewrites this field on serialize; whatever's in the struct goes to JSON.
+- On serialize, the active alt is serialized as a normal reflected struct.
+- On deserialize, the library reads `"type"`, picks the alt whose label matches, and deserializes the JSON object into that alt — including the `type` field, which is just a normal string field on the struct.
 
-The alt structs stay pure data — they do not declare a `type` field. The discriminator is purely a JSON-shape concern, handled by the variant.
+The user is responsible for keeping each alt's `type` field consistent with the alt's declared label. A default member initializer (`std::string type = "image";`) makes designated init like `ImageContent{.url = "..."}` produce a struct whose `type` already matches.
 
 ---
 
@@ -128,10 +129,13 @@ JSON:
 
 **Algorithm.**
 
-- On serialize, the library writes the active alt's label into `m.content_type` so the emitted JSON is always self-consistent — whatever the user previously wrote into `content_type` is overwritten by the truth from the variant.
+- The discriminator field lives on the parent struct (`content_type` here) and is a real string field — same trust model as inside-object: the user owns it, the library doesn't rewrite it.
+- On serialize, the parent is serialized as a normal reflected struct. Its `content_type` field appears in the JSON with whatever value the user set.
 - On deserialize, fields are visited in declaration order. `content_type` is read first as a normal string field. When the variant field `content` is visited, the library looks up its annotation (`&Message::content_type`), reads the already-deserialized value, picks the matching alt, and deserializes the nested object into it.
 
-**Constraint.** The discriminator field on the parent must be declared **before** the variant field. The library enforces this with a static_assert at the variant declaration; otherwise the variant's deserializer would have no value to consult.
+The user is responsible for keeping the parent's `content_type` value consistent with the active alt — set it explicitly when constructing.
+
+**Constraint.** The discriminator field on the parent must be declared **before** the variant field. Otherwise the variant's deserializer reads an empty string and throws.
 
 ---
 

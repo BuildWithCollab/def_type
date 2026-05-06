@@ -20,9 +20,14 @@ namespace oneof_t {
     struct BlobResource { std::string uri; std::string mimeType; std::string blob; };
     struct LinkResource { std::string uri; std::string mimeType; std::string href; };
 
-    struct TextContent  { std::string text; };
-    struct ImageContent { std::string url; int width; int height; };
-    struct AudioContent { std::string url; int duration_seconds; };
+    // The `type` field is the JSON discriminator that `oneof_by_field<"type", ...>`
+    // reads on deserialize to pick which alternative the JSON represents.
+    // Default values match the labels declared on the `oneof_type<>` wrappers,
+    // so designated-init like `ImageContent{.url = "..."}` produces a struct
+    // whose `type` already matches.
+    struct TextContent  { std::string type = "text";  std::string text;  };
+    struct ImageContent { std::string type = "image"; std::string url; int width; int height; };
+    struct AudioContent { std::string type = "audio"; std::string url; int duration_seconds; };
 
     using Resource = oneof<TextResource, BlobResource, LinkResource>;
 
@@ -249,9 +254,9 @@ TEST_CASE("shape-only: subset matches single alt", "[oneof][shape-only]") {
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("oneof_by_field: serialize image", "[oneof][by-field]") {
-    Content c = ImageContent{ "https://x/cat.png", 400, 300 };
+    Content c = ImageContent{ .url = "https://x/cat.png", .width = 400, .height = 300 };
     auto j = detail::value_to_json(c);
-    REQUIRE(j["type"]   == "image");
+    REQUIRE(j["type"]   == "image");                 // from the struct's default
     REQUIRE(j["url"]    == "https://x/cat.png");
     REQUIRE(j["width"]  == 400);
     REQUIRE(j["height"] == 300);
@@ -264,11 +269,12 @@ TEST_CASE("oneof_by_field: deserialize image", "[oneof][by-field]") {
     Content c = TextContent{};
     detail::value_from_json(j, c);
     REQUIRE((c.is<ImageContent>()));
+    REQUIRE((c.as<ImageContent>()->type == "image"));   // ← struct's field is populated
     REQUIRE((c.as<ImageContent>()->url == "u"));
 }
 
 TEST_CASE("oneof_by_field: round-trip in parent", "[oneof][by-field]") {
-    Message m{ "bob", ImageContent{ "u", 1, 2 } };
+    Message m{ "bob", ImageContent{ .url = "u", .width = 1, .height = 2 } };
     auto j = to_json(m);
     REQUIRE(j["sender"] == "bob");
     REQUIRE(j["content"]["type"] == "image");
@@ -276,6 +282,7 @@ TEST_CASE("oneof_by_field: round-trip in parent", "[oneof][by-field]") {
     auto restored = from_json<Message>(j);
     REQUIRE(restored.sender == "bob");
     REQUIRE((restored.content.is<ImageContent>()));
+    REQUIRE((restored.content.as<ImageContent>()->type == "image"));
     REQUIRE((restored.content.as<ImageContent>()->url == "u"));
 }
 
@@ -292,7 +299,7 @@ TEST_CASE("oneof_by_field: unknown discriminator", "[oneof][by-field][errors]") 
 }
 
 TEST_CASE("oneof_by_field: round-trip text alt", "[oneof][by-field]") {
-    Content c = TextContent{ "hello" };
+    Content c = TextContent{ .text = "hello" };
     auto j = detail::value_to_json(c);
     REQUIRE(j["type"] == "text");
     REQUIRE(j["text"] == "hello");
@@ -300,6 +307,7 @@ TEST_CASE("oneof_by_field: round-trip text alt", "[oneof][by-field]") {
     Content back = AudioContent{};
     detail::value_from_json(j, back);
     REQUIRE((back.is<TextContent>()));
+    REQUIRE((back.as<TextContent>()->type == "text"));
     REQUIRE((back.as<TextContent>()->text == "hello"));
 }
 
@@ -308,13 +316,19 @@ TEST_CASE("oneof_by_field: round-trip text alt", "[oneof][by-field]") {
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("oneof_by_parent_field: serialize image", "[oneof][by-parent]") {
-    OuterMessage m{ "alice", "stale_value", ImageContent{ "u", 100, 50 } };
+    // For outside-object the discriminator lives on the parent
+    // (`content_type`); the user is responsible for setting it consistently
+    // with the active alternative.
+    OuterMessage m{
+        "alice",
+        "image",
+        ImageContent{ .url = "u", .width = 100, .height = 50 }
+    };
     auto j = to_json(m);
     REQUIRE(j["sender"] == "alice");
     REQUIRE(j["content_type"] == "image");
     REQUIRE(j["content"]["url"] == "u");
     REQUIRE(j["content"]["width"] == 100);
-    REQUIRE_FALSE(j["content"].contains("type"));
 }
 
 TEST_CASE("oneof_by_parent_field: deserialize image", "[oneof][by-parent]") {
@@ -331,7 +345,11 @@ TEST_CASE("oneof_by_parent_field: deserialize image", "[oneof][by-parent]") {
 }
 
 TEST_CASE("oneof_by_parent_field: round-trip", "[oneof][by-parent]") {
-    OuterMessage m{ "bob", "", AudioContent{ "song.mp3", 240 } };
+    OuterMessage m{
+        "bob",
+        "audio",
+        AudioContent{ .url = "song.mp3", .duration_seconds = 240 }
+    };
     auto j = to_json(m);
     auto restored = from_json<OuterMessage>(j);
     REQUIRE(restored.sender == "bob");

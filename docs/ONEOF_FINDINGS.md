@@ -228,34 +228,37 @@ default-constructibility and that breaks for oneof values.
 
 ---
 
-## Outside-object (`oneof_by_parent_field`) discriminator handling
+## Discriminator handling — trust the struct
 
-Strategy B from `ONEOF_BUILD.md` was chosen and implemented:
+Both `oneof_by_field` and `oneof_by_parent_field` follow the same rule:
+**the struct represents the JSON shape exactly. The library never invents,
+strips, or rewrites a discriminator field.** Whatever the user puts in the
+struct is what goes to JSON.
 
-- **Serialize**: when serializing a struct that contains a
-  `oneof_by_parent_field` field, the parent's serializer (in
-  `value_to_json`'s `reflected_struct` branch) does a pre-pass to collect
-  "discriminator overrides" — a map from the discriminator field's name
-  to the variant's active alt label. During normal field iteration, fields
-  whose names appear in the override map get the override JSON value (the
-  active label) instead of `value_to_json(field_value)`.
+This was a real correction mid-implementation. An earlier iteration
+auto-synced the discriminator (overwrote the JSON value to match the
+variant's active alternative's label). That contradicted def_type's core
+philosophy that "your struct accurately represents your data" — so it was
+removed.
 
-  The user's stale `content_type` is overwritten by the truth from the
-  variant. No mutation of the user's struct.
+- **Inside-object (`oneof_by_field`) serialize:** the active alternative
+  is serialized as a normal reflected struct. The struct's discriminator
+  field appears in the JSON because it's a real field on the alternative.
 
-- **Deserialize**: declaration-order field iteration. The discriminator
-  field is declared before the variant. When the variant field is
-  reached, `out.*disc_ptr` is already populated, so we read it directly:
+- **Outside-object (`oneof_by_parent_field`) serialize:** the parent is
+  serialized as a normal reflected struct. The parent's discriminator
+  field appears with whatever value the user set.
 
-  ```cpp
-  std::string_view disc_value = out.*disc_ptr;
-  oneof_by_parent_field_from_json_with_disc(j[key], value, disc_value);
-  ```
+- **Deserialize, both forms:** the library reads the discriminator value
+  from JSON, picks the matching alternative by label, and deserializes
+  the JSON object into that alternative. The discriminator field on the
+  alt struct (or the parent) is populated from the JSON like any other
+  field.
 
-The discriminator-field-name lookup (during serialize) is address-based:
-iterate the parent's fields, compare each field's address to
-`&(parent.*disc_ptr)`, the matching one's name is the JSON key.
-Implemented in `find_field_name_for_member`.
+The user is responsible for keeping the discriminator value consistent
+with the active alternative. Default member initializers
+(`std::string type = "image";`) make designated init like
+`ImageContent{.url = "..."}` produce a consistent struct without effort.
 
 ---
 

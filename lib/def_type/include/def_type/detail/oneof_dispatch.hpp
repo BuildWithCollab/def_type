@@ -194,15 +194,15 @@ namespace def_type::detail {
 
     template <typename OneofT>
     nlohmann::json oneof_by_field_to_json(const OneofT& v) {
-        nlohmann::json j;
-        std::size_t idx = v._internal_variant().index();
-        std::visit([&](const auto& alt_value) {
-            j = value_to_json(alt_value);
+        // Trust the struct: serialize as-is. The struct's discriminator
+        // field appears in the JSON because it's a real field. The library
+        // does not overwrite it — if the user's value doesn't match the
+        // active alternative's label, that's the user's bug, and round-trip
+        // will fail loudly when from_json picks (or fails to find) an
+        // alternative for the bad value.
+        return std::visit([](const auto& alt_value) {
+            return value_to_json(alt_value);
         }, v._internal_variant());
-        if (!j.is_object()) j = nlohmann::json::object();
-        j[std::string(OneofT::discriminator_key.view())] =
-            std::string(OneofT::labels[idx]);
-        return j;
     }
 
     template <typename OneofT>

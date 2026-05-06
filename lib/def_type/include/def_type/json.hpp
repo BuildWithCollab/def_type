@@ -169,25 +169,8 @@ namespace detail {
             return oneof_dispatch_to_json(v);
         } else if constexpr (reflected_struct<T>) {
             nlohmann::json j = nlohmann::json::object();
-            // Pre-pass: gather discriminator overrides for any outside-object
-            // oneof fields. Maps {discriminator_field_name → active_alt_label}.
-            std::unordered_map<std::string, std::string> disc_overrides;
-            type_def<T>{}.for_each_field(v, [&](std::string_view, const auto& fv) {
-                using FV = std::remove_cvref_t<decltype(fv)>;
-                if constexpr (is_oneof_by_parent_field_v<FV>) {
-                    constexpr auto disc_ptr = FV::discriminator_member;
-                    auto disc_name = find_field_name_for_member(v, disc_ptr);
-                    if (!disc_name.empty())
-                        disc_overrides[disc_name] = std::string(active_label(fv));
-                }
-            });
             type_def<T>{}.for_each_field(v, [&](std::string_view name, const auto& value) {
-                std::string key(name);
-                auto it = disc_overrides.find(key);
-                if (it != disc_overrides.end())
-                    j[key] = it->second;
-                else
-                    j[key] = value_to_json(value);
+                j[std::string(name)] = value_to_json(value);
             });
             return j;
         } else if constexpr (std::is_same_v<T, type_instance>) {

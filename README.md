@@ -726,9 +726,11 @@ If the JSON keys don't fit any of the types — or fit more than one — `from_j
 
 Use when every type shares a common JSON shape and a string field inside that object names which type it is.
 
+The struct represents the JSON exactly: the discriminator key (`"type"` here) is a real field on each alternative struct. The library reads it on deserialize to pick which alternative the JSON is. It never invents or rewrites this field — what's in the struct is what goes to JSON.
+
 ```cpp
-struct TextContent  { std::string text; };
-struct ImageContent { std::string url; int width; int height; };
+struct TextContent  { std::string type = "text";  std::string text; };
+struct ImageContent { std::string type = "image"; std::string url; int width; int height; };
 
 using Content = oneof_by_field<"type",
     oneof_type<TextContent,  "text">,
@@ -739,7 +741,7 @@ struct Message {
     Content     content = TextContent{};
 };
 
-Message message{ "alice", ImageContent{ "https://example.com/cat.png", 400, 300 } };
+Message message{ "alice", ImageContent{ .url = "https://example.com/cat.png", .width = 400, .height = 300 } };
 auto json = to_json(message);
 // {
 //   "sender": "alice",
@@ -756,16 +758,18 @@ restored.content.is<ImageContent>();              // true
 restored.content.as<ImageContent>()->url;         // "https://example.com/cat.png"
 ```
 
-The structs themselves stay pure — they don't declare a `type` field. The selector field is purely a JSON-shape concern, handled by the variant.
+The default member initializer (`std::string type = "image"`) makes designated-init like `ImageContent{.url = "..."}` produce a struct whose `type` already matches the label. If you assign a value to `type` that doesn't match the label declared in the matching `oneof_type<>`, that's what goes to JSON — the library doesn't second-guess you, but `from_json` on that JSON will fail to find an alternative for the bad value.
 
 Errors:
-- Missing the selector field → throws naming the missing key and listing known labels.
-- Unknown selector value → throws naming the bad value and listing known labels.
+- Missing the discriminator field on the JSON → throws naming the missing key and listing known labels.
+- Discriminator value doesn't match any label → throws naming the bad value and listing known labels.
 - Duplicate labels in the same `oneof_by_field<>` → `static_assert` at the variant declaration.
 
 ### Outside-object — `oneof_by_parent_field<&P::field, oneof_type<A, "labelA">, ...>`
 
-Use when the selector field lives on the parent struct, beside the JSON object that holds the variant's data.
+Use when the discriminator lives on the parent struct, beside the JSON object that holds the variant's data.
+
+Same trust model: the parent's discriminator field is yours. The library reads it on deserialize to pick the alternative. You set it consistently with the active alternative when constructing — the library doesn't sync it for you.
 
 ```cpp
 struct OuterMessage {
@@ -779,14 +783,15 @@ struct OuterMessage {
 
 OuterMessage message{
     "alice",
-    "stale_value",
-    ImageContent{ "https://example.com/cat.png", 400, 300 }
+    "image",                                          // ← user keeps this in sync with `content`
+    ImageContent{ .url = "https://example.com/cat.png", .width = 400, .height = 300 }
 };
 auto json = to_json(message);
 // {
 //   "sender": "alice",
-//   "content_type": "image",            ← overwritten with the active type's label
+//   "content_type": "image",
 //   "content": {
+//     "type": "image",
 //     "url": "https://example.com/cat.png",
 //     "width": 400,
 //     "height": 300
@@ -794,11 +799,9 @@ auto json = to_json(message);
 // }
 ```
 
-On serialize, the parent's `content_type` JSON value is overwritten with the active type's label — whatever the user previously wrote into `content_type` is replaced. The user struct itself is **not** mutated.
+On deserialize, fields are visited in declaration order. `content_type` is read first as a normal string field. When the variant field is reached, the library reads `outer_message.content_type` (already populated) and uses its value to pick the alternative.
 
-On deserialize, fields are visited in declaration order. `content_type` is read first as a normal string field. When the variant field is reached, the library reads `outer_message.content_type` (already populated) and uses it to pick the type.
-
-**Constraint:** the selector field must be declared **before** the variant field in the parent struct. Otherwise the variant's deserializer reads an empty string and throws.
+**Constraint:** the discriminator field must be declared **before** the variant field in the parent struct. Otherwise the variant's deserializer reads an empty string and throws.
 
 ### Methods on the value
 
