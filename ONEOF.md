@@ -137,34 +137,99 @@ JSON:
 
 ## Public surface on the variant value
 
-All three forms expose the same operations on the variant value:
+All three forms expose the same five operations: a converting constructor, `is<T>()`, `as<T>()`, and `match(...)`. Default construction, copy, and move are explicitly characterized below. Nothing else is part of the public API.
+
+### Construction
 
 ```cpp
-content.is<ImageContent>();        // bool
-content.as<ImageContent>();        // ImageContent*  (nullptr if a different alt is active)
-content.as<ImageContent>();        // const ImageContent* in const contexts
+Content c = ImageContent{ .url = "https://x/cat.png", .width = 400, .height = 300 };
+Content d = TextContent{ .text = "hello" };
 
+Content x;                                      // ❌ compile error — no default ctor
+Content y = std::string{"raw"};                 // ❌ compile error — std::string is not a listed alt
+```
+
+The converting constructor is the **only** way to initialize a `oneof<...>` value. The default constructor is `= delete`d. The library will not pick a "first" alternative on the user's behalf.
+
+The constructor is constrained to the alts list — passing any other type is a compile error, not a runtime miss. `std::vector<oneof<...>>::resize(n)` and similar default-construct-many APIs will not compile against `oneof<...>`. Wrap in `std::optional<oneof<...>>` if "absent" is meaningful in the domain.
+
+Copy and move are defaulted; both behave exactly as the underlying `std::variant<Alts...>` would.
+
+### `is<T>() -> bool`
+
+Returns `true` if `T` is the currently-active alternative; `false` otherwise.
+
+```cpp
+Content c = ImageContent{ /* ... */ };
+c.is<ImageContent>();      // true
+c.is<TextContent>();       // false
+```
+
+`T` must be one of the alts. `c.is<UnrelatedType>()` is a compile error, not a silent `false`.
+
+### `as<T>()` / `as<T>() const`
+
+Returns a pointer to the active alternative when `T` is the currently-active alt; returns `nullptr` otherwise. The const overload returns `const T*`.
+
+```cpp
+Content c = ImageContent{ .url = "...", .width = 400, .height = 300 };
+
+if (auto* img = c.as<ImageContent>()) {
+    img->width *= 2;             // mutate in place
+}
+
+if (auto* txt = c.as<TextContent>()) {
+    // not reached — c is currently an ImageContent
+}
+```
+
+`T` must be one of the alts. `c.as<UnrelatedType>()` is a compile error.
+
+### `match(Fs&&...)` / `match(Fs&&...) const`
+
+Visits the active alternative with whichever overload from `Fs...` accepts it. Returns whatever the chosen overload returns (the overloads must share a common return type, or all return `void`).
+
+Both const-arm and mutating-arm forms work:
+
+```cpp
 content.match(
-    [](const TextContent&  t) { /* ... */ },
-    [](const ImageContent& i) { /* ... */ }
+    [](const TextContent&  t) { /* read-only access */ },
+    [](const ImageContent& i) { /* read-only access */ }
 );
 
-// Mutating arms:
 content.match(
     [](TextContent&  t) { t.text += "!"; },
     [](ImageContent& i) { i.width *= 2; }
 );
 ```
 
-Construction is from any listed alt by implicit conversion:
+A returning form:
 
 ```cpp
-Content c = ImageContent{ .url = "...", .width = 400, .height = 300 };
+std::string label = content.match(
+    [](const TextContent&)  { return std::string{"text"}; },
+    [](const ImageContent&) { return std::string{"image"}; }
+);
 ```
 
-There is **no default constructor.** A `oneof<...>` value must be initialized with one of its alternatives — the library does not pick a "first" alt on the user's behalf. This means `oneof<...>` is not directly usable in contexts that require default construction (e.g. `std::vector::resize(n)`); wrap it in `std::optional<oneof<...>>` if "absent" is a real state in your domain.
+A generic catch-all is permitted and matches anything not otherwise covered:
 
-`std::variant` is **not** part of the public surface. The internal storage is a `std::variant<Alts...>`, but the variant template never exposes it; `match` is the visit primitive.
+```cpp
+content.match(
+    [](const ImageContent& i) { /* image-specific */ },
+    [](const auto&)           { /* every other alt */ }
+);
+```
+
+Note: `match` inherits `std::visit`'s exhaustiveness rule — every alternative must be matched by some overload in the set. A catch-all (`[](const auto&)`) satisfies this trivially. Without a catch-all, omitting an overload for any alt is a compile error. If a new alt is later added to a `oneof`, every `match` call site that lacks a catch-all will fail to compile until updated; sites with a catch-all silently absorb the new alt.
+
+### What is **not** in the public API
+
+- `std::variant` access. The internal storage is a `std::variant<Alts...>`, but no member exposes it. There is no `_underlying()`, no friend hatch, no `get<>` / `get_if<>` overloads. Use `match` to dispatch.
+- Index-based access. There is no `index()`, no `valueless_by_exception()`. Alternatives are addressed by type via `is<T>` / `as<T>`, not by integer index.
+- A "no active alternative" state. A `oneof<...>` value always holds one of its alts (because there is no default constructor and copy/move preserve the active alt). It cannot become valueless.
+- Comparison operators. `oneof<...>` does not provide `==`, `<=>`, etc.; the user implements them if needed.
+- Streaming, hashing, or `swap` beyond what defaulted copy/move imply. Not part of the public surface.
 
 ---
 
