@@ -28,6 +28,8 @@
 #include <def_type/detail/discovery.hpp>
 #include <def_type/typed_type_def.hpp>
 #include <def_type/type_instance.hpp>
+#include <def_type/oneof.hpp>
+#include <def_type/detail/oneof_dispatch.hpp>
 
 namespace def_type {
 
@@ -120,6 +122,36 @@ namespace detail {
 
 namespace detail {
 
+    // Construct a default value for use as a deserialization buffer. For
+    // any oneof family type (which has no public default ctor), uses the
+    // library `_make_default()` factory; otherwise delegates to plain `T{}`.
+    template <typename T>
+    constexpr T construct_default() {
+        if constexpr (is_any_oneof_v<T>) {
+            return T::_make_default();
+        } else {
+            return T{};
+        }
+    }
+
+    // Find the field name on T whose address matches &(parent.*ptr).
+    // Used by the outside-object oneof path so the variant's serializer can
+    // overwrite the discriminator JSON value with the active alt's label.
+    template <typename T, typename Member>
+    inline std::string find_field_name_for_member(const T& parent, Member T::* ptr) {
+        const void* target = static_cast<const void*>(&(parent.*ptr));
+        std::string result;
+        type_def<T>{}.for_each_field(parent, [&](std::string_view name, const auto& fv) {
+            using FV = std::remove_cvref_t<decltype(fv)>;
+            using DiscT = std::remove_cvref_t<Member>;
+            if constexpr (std::is_same_v<FV, DiscT>) {
+                if (static_cast<const void*>(&fv) == target)
+                    result = std::string(name);
+            }
+        });
+        return result;
+    }
+
     template <typename T>
     nlohmann::json value_to_json(const T& v) {
         if constexpr (is_optional_v<T>) {
@@ -133,10 +165,29 @@ namespace detail {
             nlohmann::json obj = nlohmann::json::object();
             for (const auto& [k, val] : v) obj[k] = value_to_json(val);
             return obj;
+        } else if constexpr (is_any_oneof_v<T>) {
+            return oneof_dispatch_to_json(v);
         } else if constexpr (reflected_struct<T>) {
             nlohmann::json j = nlohmann::json::object();
+            // Pre-pass: gather discriminator overrides for any outside-object
+            // oneof fields. Maps {discriminator_field_name → active_alt_label}.
+            std::unordered_map<std::string, std::string> disc_overrides;
+            type_def<T>{}.for_each_field(v, [&](std::string_view, const auto& fv) {
+                using FV = std::remove_cvref_t<decltype(fv)>;
+                if constexpr (is_oneof_by_parent_field_v<FV>) {
+                    constexpr auto disc_ptr = FV::discriminator_member;
+                    auto disc_name = find_field_name_for_member(v, disc_ptr);
+                    if (!disc_name.empty())
+                        disc_overrides[disc_name] = std::string(active_label(fv));
+                }
+            });
             type_def<T>{}.for_each_field(v, [&](std::string_view name, const auto& value) {
-                j[std::string(name)] = value_to_json(value);
+                std::string key(name);
+                auto it = disc_overrides.find(key);
+                if (it != disc_overrides.end())
+                    j[key] = it->second;
+                else
+                    j[key] = value_to_json(value);
             });
             return j;
         } else if constexpr (std::is_same_v<T, type_instance>) {
@@ -156,13 +207,18 @@ namespace detail {
         if constexpr (is_optional_v<T>) {
             using Inner = optional_inner_t<T>;
             if (j.is_null()) { out = std::nullopt; }
-            else { Inner inner{}; value_from_json(j, inner); out = std::move(inner); }
+            else {
+                Inner inner = construct_default<Inner>();
+                value_from_json(j, inner);
+                out = std::move(inner);
+            }
         } else if constexpr (is_iterable_array_v<T>) {
             if (!j.is_array()) throw std::logic_error("from_json: expected array");
             using Elem = array_element_t<T>;
             out.clear();
             for (const auto& elem : j) {
-                Elem e{}; value_from_json(elem, e);
+                Elem e = construct_default<Elem>();
+                value_from_json(elem, e);
                 if constexpr (requires { out.push_back(e); }) out.push_back(std::move(e));
                 else out.insert(std::move(e));
             }
@@ -171,13 +227,27 @@ namespace detail {
             using V = map_value_t<T>;
             out.clear();
             for (auto& [key, val] : j.items()) {
-                V v{}; value_from_json(val, v); out[key] = std::move(v);
+                V v = construct_default<V>();
+                value_from_json(val, v);
+                out.insert_or_assign(key, std::move(v));
             }
+        } else if constexpr (is_any_oneof_v<T>) {
+            oneof_dispatch_from_json(j, out);
         } else if constexpr (reflected_struct<T>) {
             if (!j.is_object()) throw std::logic_error("from_json: expected object for struct");
             type_def<T>{}.for_each_field(out, [&](std::string_view name, auto& value) {
+                using FV = std::remove_cvref_t<decltype(value)>;
                 std::string key(name);
-                if (j.contains(key)) value_from_json(j[key], value);
+                if constexpr (is_oneof_by_parent_field_v<FV>) {
+                    // Discriminator field comes earlier in declaration order
+                    // (per the constraint), so out.*disc_ptr is already set.
+                    constexpr auto disc_ptr = FV::discriminator_member;
+                    std::string_view disc_value = out.*disc_ptr;
+                    if (!j.contains(key)) return;
+                    oneof_by_parent_field_from_json_with_disc(j[key], value, disc_value);
+                } else {
+                    if (j.contains(key)) value_from_json(j[key], value);
+                }
             });
         } else if constexpr (std::is_same_v<T, type_instance>) {
             if (!j.is_object()) throw std::logic_error("from_json: expected object for type_instance");

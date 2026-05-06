@@ -13,5 +13,6 @@
 #include <def_type/typed_type_def.hpp>
 #include <def_type/dynamic_type_def.hpp>
 #include <def_type/type_instance.hpp>
+#include <def_type/oneof.hpp>
 #include <def_type/json.hpp>
 #include <def_type/detail/dynamic_json.hpp>
