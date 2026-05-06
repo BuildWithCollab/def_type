@@ -9,6 +9,8 @@ set_defaultmode("release")
 
 set_languages("c++23")
 
+includes("xmake/collab.lua")
+
 if is_plat("windows") then
     add_cxxflags("/utf-8", { public = true })
 end
