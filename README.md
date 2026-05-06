@@ -14,6 +14,7 @@ Just write a normal C++ struct — `type_def<T>` discovers every member automati
 - [Working with Data](#working-with-data)
 - [Iteration](#iteration)
 - [JSON Serialization](#json-serialization)
+- [Variants with `oneof<>`](#variants-with-oneof)
 - [Dynamic Nesting](#dynamic-nesting)
 - [Validation](#validation)
 - [Parse — JSON with Reporting](#parse--json-with-reporting)
@@ -247,6 +248,7 @@ Weather weather{};  // city is "", days is 7
 - **Optionals:** `std::optional<T>`
 - **Nested structs:** `field<Address>` where Address is also a reflected struct
 - **Nested containers:** `std::vector<std::vector<T>>`, `std::map<std::string, std::vector<T>>`, etc.
+- **Variants:** `oneof<A, B, C>` — a value that holds one of several types, like `std::variant` but with JSON support. Plus `oneof_by_field<>` / `oneof_by_parent_field<>` helpers when the JSON has a discriminator field. See [Variants with `oneof<>`](#variants-with-oneof).
 
 All of the above compose — `field<std::vector<std::optional<Address>>>` just works.
 
@@ -674,6 +676,226 @@ auto j = to_json(p);
 auto restored = from_json<Person>(j);
 restored.address.value.street.value;  // "123 Main St"
 ```
+
+---
+
+## Variants with `oneof<>`
+
+`oneof<A, B, C>` is a value that holds exactly one of `A`, `B`, or `C`. Internally it's a `std::variant`, but the public surface is smaller and `to_json` / `from_json` know how to serialize it three different ways depending on what your JSON looks like.
+
+There are three forms, picked by what the JSON looks like:
+
+| Form | Template | Where the JSON says "which type is this?" |
+|---|---|---|
+| Shape-only | `oneof<A, B, C>` | Nowhere — the type is picked by which fields are present |
+| Inside-object | `oneof_by_field<"key", oneof_type<A, "labelA">, ...>` | A string field inside the variant's own JSON object |
+| Outside-object | `oneof_by_parent_field<&P::field, oneof_type<A, "labelA">, ...>` | A string field on the **parent** struct, beside the variant |
+
+Every form has the same methods on the value: `is<T>()`, `as<T>()`, `match(...)`, copy/move, and **no default constructor** (the library will not pick a "first" type for you).
+
+### Shape-only — `oneof<A, B, C>`
+
+Use when the types have distinct field sets and the JSON has no field that names which type it is. The library figures out which one the JSON belongs to by checking which type's fields cover the JSON's keys.
+
+```cpp
+struct TextResource { std::string uri; std::string mime_type; std::string text; };
+struct BlobResource { std::string uri; std::string mime_type; std::string blob; };
+
+using Resource = oneof<TextResource, BlobResource>;
+
+struct Envelope {
+    std::string sender;
+    Resource    payload = TextResource{};   // see "Default Construction" below
+};
+
+Envelope envelope{ "alice", TextResource{ "file:///hello.txt", "text/plain", "hello" } };
+auto json = to_json(envelope);
+// {
+//   "sender": "alice",
+//   "payload": { "uri": "file:///hello.txt", "mime_type": "text/plain", "text": "hello" }
+// }
+
+auto restored = from_json<Envelope>(json);
+restored.payload.is<TextResource>();         // true
+restored.payload.as<TextResource>()->text;   // "hello"
+```
+
+If the JSON keys don't fit any of the types — or fit more than one — `from_json` throws `std::logic_error` naming the offending key or the types that tied.
+
+### Inside-object — `oneof_by_field<"key", oneof_type<A, "labelA">, ...>`
+
+Use when every type shares a common JSON shape and a string field inside that object names which type it is.
+
+```cpp
+struct TextContent  { std::string text; };
+struct ImageContent { std::string url; int width; int height; };
+
+using Content = oneof_by_field<"type",
+    oneof_type<TextContent,  "text">,
+    oneof_type<ImageContent, "image">>;
+
+struct Message {
+    std::string sender;
+    Content     content = TextContent{};
+};
+
+Message message{ "alice", ImageContent{ "https://example.com/cat.png", 400, 300 } };
+auto json = to_json(message);
+// {
+//   "sender": "alice",
+//   "content": {
+//     "type": "image",
+//     "url": "https://example.com/cat.png",
+//     "width": 400,
+//     "height": 300
+//   }
+// }
+
+auto restored = from_json<Message>(json);
+restored.content.is<ImageContent>();              // true
+restored.content.as<ImageContent>()->url;         // "https://example.com/cat.png"
+```
+
+The structs themselves stay pure — they don't declare a `type` field. The selector field is purely a JSON-shape concern, handled by the variant.
+
+Errors:
+- Missing the selector field → throws naming the missing key and listing known labels.
+- Unknown selector value → throws naming the bad value and listing known labels.
+- Duplicate labels in the same `oneof_by_field<>` → `static_assert` at the variant declaration.
+
+### Outside-object — `oneof_by_parent_field<&P::field, oneof_type<A, "labelA">, ...>`
+
+Use when the selector field lives on the parent struct, beside the JSON object that holds the variant's data.
+
+```cpp
+struct OuterMessage {
+    std::string sender;
+    std::string content_type;     // ← the field that says which type `content` is
+
+    oneof_by_parent_field<&OuterMessage::content_type,
+        oneof_type<TextContent,  "text">,
+        oneof_type<ImageContent, "image">> content = TextContent{};
+};
+
+OuterMessage message{
+    "alice",
+    "stale_value",
+    ImageContent{ "https://example.com/cat.png", 400, 300 }
+};
+auto json = to_json(message);
+// {
+//   "sender": "alice",
+//   "content_type": "image",            ← overwritten with the active type's label
+//   "content": {
+//     "url": "https://example.com/cat.png",
+//     "width": 400,
+//     "height": 300
+//   }
+// }
+```
+
+On serialize, the parent's `content_type` JSON value is overwritten with the active type's label — whatever the user previously wrote into `content_type` is replaced. The user struct itself is **not** mutated.
+
+On deserialize, fields are visited in declaration order. `content_type` is read first as a normal string field. When the variant field is reached, the library reads `outer_message.content_type` (already populated) and uses it to pick the type.
+
+**Constraint:** the selector field must be declared **before** the variant field in the parent struct. Otherwise the variant's deserializer reads an empty string and throws.
+
+### Methods on the value
+
+Every `oneof` form exposes the same five methods.
+
+```cpp
+oneof<Dog, Cat> pet = Dog{ "Rex", 3 };
+
+// is<T>() — is the active type T?
+pet.is<Dog>();                          // true
+pet.is<Cat>();                          // false
+
+// as<T>() — pointer to the active value, or nullptr
+if (auto* dog = pet.as<Dog>())          // non-null when Dog is active
+    dog->age = 7;
+pet.as<Cat>();                          // nullptr
+
+// match(...) — visit the active value; like std::visit but on the oneof directly
+auto label = pet.match(
+    [](const Dog&) { return std::string("dog"); },
+    [](const Cat&) { return std::string("cat"); }
+);
+
+// reassign — accepts any of the listed types directly
+pet = Cat{ "Whiskers", true };
+```
+
+`is<T>()` and `as<T>()` are constrained — calling them with a type that isn't in the variant is a compile error.
+
+`match` follows `std::visit`'s rule: every type in the variant must be handled by some overload, or by a generic catch-all `[](const auto&) { ... }`.
+
+### Default Construction
+
+`oneof<>` has no default constructor — the library will not pick a "first" type on your behalf. If you put a `oneof` inside a struct that you want to be default-constructible (or that you want to deserialize via `from_json<Parent>(json)`), give the field an explicit default initializer:
+
+```cpp
+struct Message {
+    std::string sender;
+    Content     content = TextContent{};   // ← required so Message is default-constructible
+};
+```
+
+Without that, `Message{}` won't compile and `from_json<Message>(json)` won't work.
+
+### Inside other types
+
+`oneof<>` and the helpers work inside containers, optionals, and nested structs without any extra opt-in:
+
+```cpp
+using Pet = oneof<Dog, Cat>;
+
+struct Shelter      { std::vector<Pet>                pets;        };
+struct PetCarrier   { std::optional<Pet>              maybe_pet;   };
+struct PetRegistry  { std::map<std::string, Pet>      by_name;     };
+```
+
+All round-trip through `to_json` / `from_json` automatically.
+
+### Manual JSON via nlohmann hooks
+
+When none of the three built-in forms match the JSON your protocol uses — labels that aren't strings, the selector field is several levels above the variant, anything custom — write the standard `nlohmann::json` `to_json` / `from_json` functions in the same namespace as your variant's type. They're found automatically by C++ lookup and **always win** over the library's built-in handling:
+
+```cpp
+namespace orchard {
+    struct Apple { int weight_grams; };
+    struct Pear  { int ripeness;     };
+
+    using Fruit = def_type::oneof<Apple, Pear>;
+
+    void to_json(nlohmann::json& json, const Fruit& fruit) {
+        fruit.match(
+            [&](const Apple& apple) {
+                json = {
+                    { "fruit_type",   "apple" },
+                    { "weight_grams", apple.weight_grams }
+                };
+            },
+            [&](const Pear& pear) {
+                json = {
+                    { "fruit_type", "pear" },
+                    { "ripeness",   pear.ripeness }
+                };
+            }
+        );
+    }
+
+    void from_json(const nlohmann::json& json, Fruit& fruit) {
+        auto fruit_type = json.at("fruit_type").get<std::string>();
+        if (fruit_type == "apple")
+            fruit = Apple{ json.at("weight_grams").get<int>() };
+        else
+            fruit = Pear{ json.at("ripeness").get<int>() };
+    }
+}
+```
+
+If you write one, write both — the library detects them as a pair, and falls back to its default for the side you didn't write.
 
 ---
 
