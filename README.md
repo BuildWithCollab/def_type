@@ -15,6 +15,7 @@ Just write a normal C++ struct — `type_def<T>` discovers every member automati
 - [Iteration](#iteration)
 - [JSON Serialization](#json-serialization)
 - [Variants with `oneof<>`](#variants-with-oneof)
+- [Type-Erased JSON with `unknown`](#type-erased-json-with-unknown)
 - [Dynamic Nesting](#dynamic-nesting)
 - [Validation](#validation)
 - [Parse — JSON with Reporting](#parse--json-with-reporting)
@@ -249,6 +250,7 @@ Weather weather{};  // city is "", days is 7
 - **Nested structs:** `field<Address>` where Address is also a reflected struct
 - **Nested containers:** `std::vector<std::vector<T>>`, `std::map<std::string, std::vector<T>>`, etc.
 - **Variants:** `oneof<A, B, C>` — a value that holds one of several types, like `std::variant` but with JSON support. Plus `oneof_by_field<>` / `oneof_by_parent_field<>` helpers when the JSON has a discriminator field. See [Variants with `oneof<>`](#variants-with-oneof).
+- **Type-erased JSON:** `unknown` — a field that holds raw JSON whose shape you don't know yet, and lets you probe it with `.is<T>()` / `.as<T>()` / `.try_as<T>()` (top-level or by path) when you do. See [Type-Erased JSON with `unknown`](#type-erased-json-with-unknown).
 
 All of the above compose — `field<std::vector<std::optional<Address>>>` just works.
 
@@ -899,6 +901,158 @@ namespace orchard {
 ```
 
 If you write one, write both — the library detects them as a pair, and falls back to its default for the side you didn't write.
+
+---
+
+## Type-Erased JSON with `unknown`
+
+`unknown` is a field type that holds raw JSON whose shape you don't know yet. It's the right tool when you can't enumerate the alternatives at compile time — open-set RPC dispatch, plugin parameters, partially-typed payloads — and `oneof<>` therefore doesn't fit.
+
+A motivating example: a JSON-RPC 2.0 envelope, where `params` varies per `method` and the set of methods isn't fixed at compile time:
+
+```cpp
+struct JsonRpcRequest {
+    std::string jsonrpc;
+    int64_t     id;
+    std::string method;
+    unknown     params;
+};
+
+auto req = from_json<JsonRpcRequest>(std::string(R"({
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "describe-dog",
+    "params": { "name": "Rover", "age": 12, "breed": "Golden Retriever" }
+})"));
+```
+
+`req.params` now holds the raw JSON for `params`. Probe it when you've decided what shape you expect:
+
+```cpp
+struct Dog { std::string name; int age; std::string breed; };
+
+req.params.is<Dog>();              // true — shape matches Dog
+req.params.as<Dog>();              // returns a Dog
+req.params.try_as<Dog>();          // returns std::optional<Dog>
+```
+
+### `is<T>()` / `as<T>()` / `try_as<T>()`
+
+The three methods follow the same semantics:
+
+| Method | Returns | On mismatch |
+|---|---|---|
+| `is<T>()` | `bool` | `false` |
+| `as<T>()` | `T` | throws `std::logic_error` |
+| `try_as<T>()` | `std::optional<T>` | `std::nullopt` |
+
+For reflected struct types, all three apply a **shape-match gate** before parsing — every JSON key must name a field of `T`. This mirrors how `oneof<>`'s shape-only dispatch resolves alternatives, and prevents the library's permissive deserialize-with-defaults behavior from masquerading as a successful match. For non-reflected types (primitives, containers, optionals), the check is just whether the parse would succeed.
+
+```cpp
+unknown u(nlohmann::json{{"name", "Whiskers"}, {"indoor", true}});
+u.is<Dog>();   // false — "indoor" is not a Dog field
+```
+
+### Drilling in by path — `get<T>(path)` / `try_get<T>(path)` / `is<T>(path)`
+
+`as<T>` / `try_as<T>` operate on the **whole** stored JSON — there's no path overload, because the verb means "interpret this value as `T`."
+
+For nested access there's a separate verb:
+
+| Method | Returns | On mismatch |
+|---|---|---|
+| `get<T>(path)` | `T` | throws `std::logic_error` |
+| `try_get<T>(path)` | `std::optional<T>` | `std::nullopt` |
+| `is<T>(path)` | `bool` | `false` |
+
+Two path syntaxes, picked by the leading character:
+
+- **Dotted path** (default): `"breed.name"` — friendly for object navigation.
+- **JSON Pointer** (RFC 6901), when the path starts with `/`: `"/breed/name"`, `"/items/0"` — supports array indexing and edge-case keys.
+
+Dotted paths are translated to JSON Pointer internally and walked via `nlohmann::json`, so both forms are equally fast.
+
+```cpp
+unknown u(nlohmann::json{
+    {"name", "Rover"},
+    {"age", 12},
+    {"breed", {{"name", "Golden Retriever"}, {"origin", "Scotland"}}}
+});
+
+u.get<std::string>("name");                // "Rover"
+u.get<int>("age");                         // 12
+u.get<std::string>("breed.name");          // "Golden Retriever"
+u.get<DogBreed>("breed");                  // pulls a sub-object out as a struct
+u.get<std::string>("/items/0");            // JSON Pointer for array indexing
+u.is<int>("breed.name");                   // false — value is a string
+u.try_get<std::string>("breed.nope");      // nullopt — bad path
+```
+
+### Round-tripping
+
+`unknown` round-trips through `to_json` / `from_json` automatically — `to_json(req)` emits the originally-stored JSON for the `unknown` field:
+
+```cpp
+auto round = to_json(req);
+// round["params"] is identical to the JSON that came in
+```
+
+### Constructing from a typed C++ value
+
+Assigning a typed value serializes it on the spot and stashes the resulting JSON. Subsequent `to_json` is just a dump — no re-serialize. Subsequent `as<T>()` does a fresh deserialize.
+
+```cpp
+JsonRpcRequest req{
+    .jsonrpc = "2.0",
+    .id      = 10,
+    .method  = "create-dog",
+    .params  = Dog{ "Rex", 3, "Husky" }     // serialized via to_json(Dog{...})
+};
+
+auto j = to_json(req);
+// j["params"] == { "name": "Rex", "age": 3, "breed": "Husky" }
+```
+
+You can also assign a `nlohmann::json` directly:
+
+```cpp
+unknown u;
+u = nlohmann::json{{"foo", 1}};
+```
+
+### Field-level metadata and validators
+
+`unknown` plugs into `field<T, with<...>>` and the validator infrastructure like any other type:
+
+```cpp
+struct help_meta { const char* summary = ""; };
+
+struct must_parse_as_dog {
+    std::optional<std::string> operator()(const unknown& u) const {
+        if (u.is<Dog>()) return std::nullopt;
+        return std::string("params do not match Dog shape");
+    }
+};
+
+struct CreateDogRequest {
+    std::string method;
+    field<unknown, with<help_meta>> params {
+        .with       = {{.summary = "the dog payload"}},
+        .validators = validators(must_parse_as_dog{})
+    };
+};
+```
+
+Validators are just plain functions taking `const unknown&` — they probe with the same `.is<T>()` / `.try_as<T>()` API as everyone else.
+
+### Raw access
+
+If you need to drop down to nlohmann directly:
+
+```cpp
+const nlohmann::json& raw = u.raw();
+nlohmann::json&       mut = u.raw();
+```
 
 ---
 

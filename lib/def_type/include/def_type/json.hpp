@@ -29,6 +29,7 @@
 #include <def_type/typed_type_def.hpp>
 #include <def_type/type_instance.hpp>
 #include <def_type/oneof.hpp>
+#include <def_type/unknown.hpp>
 #include <def_type/detail/oneof_dispatch.hpp>
 
 namespace def_type {
@@ -167,6 +168,8 @@ namespace detail {
             return obj;
         } else if constexpr (is_any_oneof_v<T>) {
             return oneof_dispatch_to_json(v);
+        } else if constexpr (std::is_same_v<T, unknown>) {
+            return v.raw();
         } else if constexpr (reflected_struct<T>) {
             nlohmann::json j = nlohmann::json::object();
             type_def<T>{}.for_each_field(v, [&](std::string_view name, const auto& value) {
@@ -216,6 +219,8 @@ namespace detail {
             }
         } else if constexpr (is_any_oneof_v<T>) {
             oneof_dispatch_from_json(j, out);
+        } else if constexpr (std::is_same_v<T, unknown>) {
+            out = j;
         } else if constexpr (reflected_struct<T>) {
             if (!j.is_object()) throw std::logic_error("from_json: expected object for struct");
             type_def<T>{}.for_each_field(out, [&](std::string_view name, auto& value) {
