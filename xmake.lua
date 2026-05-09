@@ -21,10 +21,10 @@ option("build_tests")
     set_description("Build test targets")
 option_end()
 
-option("nlohmann_json_external")
-    set_default(false)
+option("nlohmann_json_pkg")
+    set_default("nlohmann_json")
     set_showmenu(true)
-    set_description("Use external nlohmann_json instead of bundled one")
+    set_description("Package spec for nlohmann_json (e.g. 'vcpkg::nlohmann-json')")
 option_end()
 
 option("enable_pfr")
@@ -38,9 +38,7 @@ add_requires("unordered_dense")
 add_requires("magic_enum")
 add_requires("nameof")
 
-if not get_config("nlohmann_json_external") then
-    add_requires("nlohmann_json")
-end
+add_requires(get_config("nlohmann_json_pkg"), { alias = "nlohmann_json" })
 
 if get_config("enable_pfr") then
     add_requires("pfr_non_boost")
