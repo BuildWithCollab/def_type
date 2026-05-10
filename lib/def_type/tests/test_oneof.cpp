@@ -441,7 +441,7 @@ TEST_CASE("composition: vector of variants", "[oneof][composition]") {
 TEST_CASE("composition: optional<oneof>", "[oneof][composition]") {
     Box b1{};
     auto j1 = to_json(b1);
-    REQUIRE(j1["maybe_pet"].is_null());
+    REQUIRE_FALSE(j1.contains("maybe_pet"));
 
     Box b2{ Dog{ "Rex", 3 } };
     auto j2 = to_json(b2);

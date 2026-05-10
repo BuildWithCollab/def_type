@@ -173,7 +173,13 @@ namespace detail {
         } else if constexpr (reflected_struct<T>) {
             nlohmann::json j = nlohmann::json::object();
             type_def<T>{}.for_each_field(v, [&](std::string_view name, const auto& value) {
-                j[std::string(name)] = value_to_json(value);
+                using V = std::remove_cvref_t<decltype(value)>;
+                if constexpr (is_optional_v<V>) {
+                    if (value.has_value())
+                        j[std::string(name)] = value_to_json(*value);
+                } else {
+                    j[std::string(name)] = value_to_json(value);
+                }
             });
             return j;
         } else if constexpr (std::is_same_v<T, type_instance>) {
@@ -283,7 +289,13 @@ namespace detail {
     template <typename V>
     void init_json_codec(const dynamic_field_def& fd) {
         fd.to_json_fn = [](const std::any& a) -> std::any {
-            return std::any(value_to_json(*std::any_cast<V>(&a)));
+            if constexpr (is_optional_v<V>) {
+                const auto& opt = *std::any_cast<V>(&a);
+                if (!opt.has_value()) return std::any{};  // omit key
+                return std::any(value_to_json(*opt));
+            } else {
+                return std::any(value_to_json(*std::any_cast<V>(&a)));
+            }
         };
         fd.from_json_fn = [](std::any& a, const std::any& j_any) {
             const auto& j = *std::any_cast<nlohmann::json>(&j_any);
@@ -373,7 +385,13 @@ template <typename T>
 nlohmann::json to_json(const T& obj, const type_def<T>& typedef_schema) {
     nlohmann::json j = nlohmann::json::object();
     typedef_schema.for_each_field(obj, [&](std::string_view name, const auto& value) {
-        j[std::string(name)] = detail::value_to_json(value);
+        using V = std::remove_cvref_t<decltype(value)>;
+        if constexpr (detail::is_optional_v<V>) {
+            if (value.has_value())
+                j[std::string(name)] = detail::value_to_json(*value);
+        } else {
+            j[std::string(name)] = detail::value_to_json(value);
+        }
     });
     return j;
 }

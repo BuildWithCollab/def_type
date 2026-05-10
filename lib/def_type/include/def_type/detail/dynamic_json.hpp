@@ -51,6 +51,7 @@ inline nlohmann::json type_instance::to_json() const {
         auto& fd = fields[i];
         detail::ensure_codec(fd);
         auto result = fd.to_json_fn(values_[i]);
+        if (!result.has_value()) continue;  // empty optional → omit key
         j[fd.name] = *std::any_cast<nlohmann::json>(&result);
     }
     return j;

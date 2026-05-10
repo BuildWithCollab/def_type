@@ -228,7 +228,7 @@ TEST_CASE("typed to_json: optional absent", "[to_json][typed][optional]") {
 
     auto j = to_json(m);
 
-    REQUIRE(j["nickname"].is_null());
+    REQUIRE_FALSE(j.contains("nickname"));
 }
 
 TEST_CASE("dynamic to_json: optional absent", "[to_json][dynamic][optional]") {
@@ -240,7 +240,7 @@ TEST_CASE("dynamic to_json: optional absent", "[to_json][dynamic][optional]") {
 
     auto j = obj.to_json();
 
-    REQUIRE(j["nickname"].is_null());
+    REQUIRE_FALSE(j.contains("nickname"));
 }
 
 TEST_CASE("typed to_json: optional nested struct present", "[to_json][typed][optional][nested]") {
@@ -276,7 +276,7 @@ TEST_CASE("typed to_json: optional nested struct absent", "[to_json][typed][opti
 
     auto j = to_json(o);
 
-    REQUIRE(j["extra"].is_null());
+    REQUIRE_FALSE(j.contains("extra"));
 }
 
 TEST_CASE("dynamic to_json: optional nested struct absent", "[to_json][dynamic][optional][nested]") {
@@ -288,7 +288,7 @@ TEST_CASE("dynamic to_json: optional nested struct absent", "[to_json][dynamic][
 
     auto j = obj.to_json();
 
-    REQUIRE(j["extra"].is_null());
+    REQUIRE_FALSE(j.contains("extra"));
 }
 
 TEST_CASE("typed to_json: std::map<string, int>", "[to_json][typed][map]") {
@@ -663,7 +663,7 @@ TEST_CASE("typed to_json: optional vector absent", "[to_json][typed][optional_co
 
     auto j = to_json(ov);
 
-    REQUIRE(j["maybe_tags"].is_null());
+    REQUIRE_FALSE(j.contains("maybe_tags"));
 }
 
 TEST_CASE("dynamic to_json: optional vector absent", "[to_json][dynamic][optional_collection]") {
@@ -673,7 +673,7 @@ TEST_CASE("dynamic to_json: optional vector absent", "[to_json][dynamic][optiona
 
     auto j = obj.to_json();
 
-    REQUIRE(j["maybe_tags"].is_null());
+    REQUIRE_FALSE(j.contains("maybe_tags"));
 }
 
 TEST_CASE("typed to_json: vector of optionals", "[to_json][typed][optional_collection]") {

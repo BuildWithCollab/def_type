@@ -374,7 +374,7 @@ TEST_CASE("to_json with optional field — absent", "[field][json]") {
     auto j = to_json(m);
 
     REQUIRE(j["name"] == "Bob");
-    REQUIRE(j["nickname"].is_null());
+    REQUIRE_FALSE(j.contains("nickname"));
 }
 
 TEST_CASE("to_json with extensions — serializes value, not metadata", "[field][json][with]") {
@@ -494,7 +494,7 @@ TEST_CASE("to_json with optional ReflectedStruct — absent", "[field][json]") {
 
     auto j = to_json(o);
     REQUIRE(j["name"] == "test");
-    REQUIRE(j["extra"].is_null());
+    REQUIRE_FALSE(j.contains("extra"));
 }
 
 // ── Map fields ───────────────────────────────────────────────────────────
