@@ -293,6 +293,6 @@ TEST_CASE("empty aggregates work end-to-end", "[field][empty]") {
     auto round = from_json<EmptyStruct>(nlohmann::json::object());
     (void)round;
 
-    auto from_str = from_json<EmptyStruct>(std::string("{}"));
+    auto from_str = from_json_string<EmptyStruct>("{}");
     (void)from_str;
 }

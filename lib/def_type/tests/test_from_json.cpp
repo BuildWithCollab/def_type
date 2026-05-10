@@ -722,7 +722,7 @@ TEST_CASE("typed from_json: deserializes all non-meta members", "[from_json][typ
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("typed from_json: from JSON string", "[from_json][typed][string]") {
-    auto args = from_json<SimpleArgs>(std::string(R"({"name":"Alice","age":30,"active":true})"));
+    auto args = from_json_string<SimpleArgs>(R"({"name":"Alice","age":30,"active":true})");
 
     REQUIRE(args.name.value == "Alice");
     REQUIRE(args.age.value == 30);
@@ -735,7 +735,7 @@ TEST_CASE("typed from_json: from pretty JSON string", "[from_json][typed][string
         "age": 25,
         "active": false
     })";
-    auto args = from_json<SimpleArgs>(pretty);
+    auto args = from_json_string<SimpleArgs>(pretty);
 
     REQUIRE(args.name.value == "Bob");
     REQUIRE(args.age.value == 25);
@@ -1025,7 +1025,7 @@ TEST_CASE("dynamic from_json: throws on type mismatch — nested struct gets arr
 }
 
 TEST_CASE("typed from_json: throws on invalid JSON string", "[from_json][typed][throw]") {
-    REQUIRE_THROWS(from_json<SimpleArgs>(std::string("not valid json")));
+    REQUIRE_THROWS(from_json_string<SimpleArgs>("not valid json"));
 }
 
 TEST_CASE("typed from_json: throws on type mismatch — map field gets array", "[from_json][typed][throw]") {
@@ -2558,7 +2558,7 @@ TEST_CASE("hybrid round-trip: to_json then from_json preserves fields", "[json][
 }
 
 TEST_CASE("hybrid from_json: from JSON string", "[from_json][hybrid][string]") {
-    auto d = from_json<HJsonDog>(std::string(R"({"name":"Rex","age":3,"breed":"Husky"})"));
+    auto d = from_json_string<HJsonDog>(R"({"name":"Rex","age":3,"breed":"Husky"})");
 
     REQUIRE(d.name.value == "Rex");
     REQUIRE(d.age.value == 3);

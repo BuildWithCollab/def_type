@@ -39,12 +39,12 @@ namespace test_unknown {
 TEST_CASE("envelope with oneof params: dog shape", "[unknown][oneof][envelope]") {
     using namespace test_unknown;
 
-    auto envelope = from_json<JsonRpcEnvelope>(std::string(R"({
+    auto envelope = from_json_string<JsonRpcEnvelope>(R"({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "generic-must-not-be-able-to-know-params-type-from-this",
         "params": { "breed": "Husky", "tail_wags": 42 }
-    })"));
+    })");
 
     REQUIRE(envelope.jsonrpc == "2.0");
     REQUIRE(envelope.id == 1);
@@ -62,12 +62,12 @@ TEST_CASE("envelope with oneof params: dog shape", "[unknown][oneof][envelope]")
 TEST_CASE("envelope with oneof params: weather shape", "[unknown][oneof][envelope]") {
     using namespace test_unknown;
 
-    auto envelope = from_json<JsonRpcEnvelope>(std::string(R"({
+    auto envelope = from_json_string<JsonRpcEnvelope>(R"({
         "jsonrpc": "2.0",
         "id": 2,
         "method": "literally-anything",
         "params": { "latitude": 47.6, "longitude": -122.3, "days_ahead": 7 }
-    })"));
+    })");
 
     REQUIRE(envelope.jsonrpc == "2.0");
     REQUIRE(envelope.id == 2);
@@ -86,12 +86,12 @@ TEST_CASE("envelope with oneof params: weather shape", "[unknown][oneof][envelop
 TEST_CASE("envelope with oneof params: match() reads through the variant", "[unknown][oneof][envelope]") {
     using namespace test_unknown;
 
-    auto envelope = from_json<JsonRpcEnvelope>(std::string(R"({
+    auto envelope = from_json_string<JsonRpcEnvelope>(R"({
         "jsonrpc": "2.0",
         "id": 3,
         "method": "still-opaque",
         "params": { "breed": "Corgi", "tail_wags": 999 }
-    })"));
+    })");
 
     auto summary = envelope.params.match(
         [](const DogParams& d)        { return std::string("dog:") + d.breed; },
@@ -319,12 +319,12 @@ TEST_CASE("unknown: parses unknown params from a JSON-RPC envelope", "[unknown][
     using namespace test_unknown_envelope;
     using namespace test_unknown_type;
 
-    auto req = from_json<JsonRpcRequest>(std::string(R"({
+    auto req = from_json_string<JsonRpcRequest>(R"({
         "jsonrpc": "2.0",
         "id": 7,
         "method": "describe-dog",
         "params": { "name": "Rover", "age": 12, "breed": "Golden Retriever" }
-    })"));
+    })");
 
     REQUIRE(req.jsonrpc == "2.0");
     REQUIRE(req.id == 7);
@@ -344,7 +344,7 @@ TEST_CASE("unknown: drills into nested params via path on an envelope", "[unknow
     using namespace test_unknown_envelope;
     using namespace test_unknown_type;
 
-    auto req = from_json<JsonRpcRequest>(std::string(R"({
+    auto req = from_json_string<JsonRpcRequest>(R"({
         "jsonrpc": "2.0",
         "id": 8,
         "method": "describe-dog-deep",
@@ -353,7 +353,7 @@ TEST_CASE("unknown: drills into nested params via path on an envelope", "[unknow
             "age": 12,
             "breed": { "name": "Golden Retriever", "origin": "Scotland" }
         }
-    })"));
+    })");
 
     REQUIRE(req.params.get<std::string>("name") == "Rover");
     REQUIRE(req.params.get<std::string>("breed.name") == "Golden Retriever");

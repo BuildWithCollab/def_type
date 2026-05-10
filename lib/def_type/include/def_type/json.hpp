@@ -336,7 +336,7 @@ T from_json(const nlohmann::json& j) {
 }
 
 template <detail::reflected_struct T>
-T from_json(const std::string& json_str) {
+T from_json_string(const std::string& json_str) {
     auto j = nlohmann::json::parse(json_str);
     return from_json<T>(j);
 }
@@ -362,7 +362,7 @@ T from_json(const nlohmann::json& j) {
 
 template <typename T>
     requires detail::is_any_oneof_v<T>
-T from_json(const std::string& json_str) {
+T from_json_string(const std::string& json_str) {
     auto j = nlohmann::json::parse(json_str);
     return from_json<T>(j);
 }

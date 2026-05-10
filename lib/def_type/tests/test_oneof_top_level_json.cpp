@@ -126,10 +126,7 @@ TEST_CASE("top-level oneof: from_json — link alt", "[oneof][top-level][shape-o
 }
 
 TEST_CASE("top-level oneof: from_json — string overload", "[oneof][top-level][shape-only]") {
-    // Wrapped in std::string{} to disambiguate from the nlohmann::json overload
-    // (a raw `const char[N]` literal is convertible to both — same quirk the
-    // reflected_struct overloads have always had).
-    auto r = from_json<Resource>(std::string{R"({"uri":"u","mimeType":"text/plain","text":"hi"})"});
+    auto r = from_json_string<Resource>(R"({"uri":"u","mimeType":"text/plain","text":"hi"})");
     REQUIRE(r.is<TextResource>());
     REQUIRE(r.as<TextResource>()->text == "hi");
 }
@@ -168,7 +165,7 @@ TEST_CASE("top-level oneof: from_json — non-object throws", "[oneof][top-level
 }
 
 TEST_CASE("top-level oneof: from_json string overload — parse error propagates", "[oneof][top-level][shape-only][errors]") {
-    REQUIRE_THROWS(from_json<Resource>(std::string("{not json")));
+    REQUIRE_THROWS(from_json_string<Resource>("{not json"));
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -205,7 +202,7 @@ TEST_CASE("top-level oneof_by_field: from_json — text alt", "[oneof][top-level
 }
 
 TEST_CASE("top-level oneof_by_field: from_json — string overload", "[oneof][top-level][by-field]") {
-    auto c = from_json<Content>(std::string{R"({"type":"audio","url":"u","duration_seconds":90})"});
+    auto c = from_json_string<Content>(R"({"type":"audio","url":"u","duration_seconds":90})");
     REQUIRE(c.is<AudioContent>());
     REQUIRE(c.as<AudioContent>()->duration_seconds == 90);
 }
