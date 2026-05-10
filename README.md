@@ -68,7 +68,7 @@ auto j = to_json(rex);
 // {"name": "Rex", "age": 3, "breed": "Husky"}
 
 // Deserialize from JSON
-auto buddy = from_json<Dog>(R"({"name": "Buddy", "age": 5, "breed": "Lab"})");
+auto buddy = from_json_string<Dog>(R"({"name": "Buddy", "age": 5, "breed": "Lab"})");
 buddy.name;  // "Buddy"
 
 // Set/get by name at runtime
@@ -586,7 +586,7 @@ dog.name.value;   // "Rex"
 dog.age.value;    // 3
 
 // Or from a JSON string
-auto dog2 = from_json<Dog>(R"({"name": "Buddy", "age": 5, "breed": "Lab"})");
+auto dog2 = from_json_string<Dog>(R"({"name": "Buddy", "age": 5, "breed": "Lab"})");
 ```
 
 **Plain structs** — PFR discovers the fields, so `from_json<T>` works directly:
@@ -918,12 +918,12 @@ struct JsonRpcRequest {
     unknown     params;
 };
 
-auto req = from_json<JsonRpcRequest>(std::string(R"({
+auto req = from_json_string<JsonRpcRequest>(R"({
     "jsonrpc": "2.0",
     "id": 1,
     "method": "describe-dog",
     "params": { "name": "Rover", "age": 12, "breed": "Golden Retriever" }
-})"));
+})");
 ```
 
 `req.params` now holds the raw JSON for `params`. Probe it when you've decided what shape you expect:
