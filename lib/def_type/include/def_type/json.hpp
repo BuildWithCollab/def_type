@@ -306,6 +306,26 @@ std::string to_json_string(const T& obj, int indent = -1) {
     return indent < 0 ? j.dump() : j.dump(indent);
 }
 
+// Top-level oneof serialization — same dispatch the reflected-struct
+// branch uses internally, exposed publicly so codegen and isolated unit
+// tests can serialize a oneof without wrapping it in a carrier struct.
+//
+// `oneof_by_parent_field` emits only the alt's data here (no discriminator),
+// because the discriminator lives on a sibling field of an enclosing parent
+// that isn't in scope at top level.
+template <typename T>
+    requires detail::is_any_oneof_v<T>
+nlohmann::json to_json(const T& v) {
+    return detail::oneof_dispatch_to_json(v);
+}
+
+template <typename T>
+    requires detail::is_any_oneof_v<T>
+std::string to_json_string(const T& v, int indent = -1) {
+    auto j = detail::oneof_dispatch_to_json(v);
+    return indent < 0 ? j.dump() : j.dump(indent);
+}
+
 // ── from_json ──────────────────────────────────────────────────────────
 
 template <detail::reflected_struct T>
@@ -316,6 +336,32 @@ T from_json(const nlohmann::json& j) {
 }
 
 template <detail::reflected_struct T>
+T from_json(const std::string& json_str) {
+    auto j = nlohmann::json::parse(json_str);
+    return from_json<T>(j);
+}
+
+// Top-level oneof deserialization. `oneof` and `oneof_by_field` work because
+// they carry enough information in the JSON to pick an alt (shape-fit and a
+// discriminator key respectively). `oneof_by_parent_field` fundamentally
+// can't — its discriminator lives on a sibling of an enclosing parent — so
+// we static_assert with a message that points the caller at the right shape.
+template <typename T>
+    requires detail::is_any_oneof_v<T>
+T from_json(const nlohmann::json& j) {
+    static_assert(!detail::is_oneof_by_parent_field_v<T>,
+        "def_type::from_json: oneof_by_parent_field cannot be deserialized "
+        "at top level — its discriminator lives on a sibling field of an "
+        "enclosing parent struct. Wrap it in a parent struct and call "
+        "from_json on the parent (the parent's reflected_struct deserializer "
+        "reads the discriminator from its sibling field and dispatches).");
+    T result = T::_make_default();
+    detail::value_from_json(j, result);
+    return result;
+}
+
+template <typename T>
+    requires detail::is_any_oneof_v<T>
 T from_json(const std::string& json_str) {
     auto j = nlohmann::json::parse(json_str);
     return from_json<T>(j);
