@@ -349,7 +349,7 @@ namespace def_type::detail {
 
     template <typename T, template<std::size_t, typename> class Pred, std::size_t... Is>
     consteval auto filter_indices(std::index_sequence<Is...>) {
-        constexpr auto N = (... + (Pred<Is, T>::value ? 1 : 0));
+        constexpr auto N = (std::size_t{0} + ... + (Pred<Is, T>::value ? 1 : 0));
         std::array<std::size_t, N> arr{};
         std::size_t pos = 0;
         ((Pred<Is, T>::value ? (arr[pos++] = Is, 0) : 0), ...);

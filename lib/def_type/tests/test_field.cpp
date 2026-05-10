@@ -258,15 +258,10 @@ TEST_CASE("reflected_struct accepts aggregates with Field members", "[field][con
 }
 
 TEST_CASE("reflected_struct rejects non-qualifying types", "[field][concept]") {
-    // int and NonAggregate fail is_aggregate_v, so they short-circuit
-    // without ever hitting the PFR/registry fallback.
+    // Only non-aggregates fail the concept now — int and NonAggregate
+    // both fail is_aggregate_v and short-circuit.
     STATIC_REQUIRE(!detail::reflected_struct<int>);
     STATIC_REQUIRE(!detail::reflected_struct<NonAggregate>);
-
-#ifdef DEF_TYPE_HAS_PFR
-    // EmptyStruct has zero members — not reflectable
-    STATIC_REQUIRE(!detail::reflected_struct<EmptyStruct>);
-#endif
 }
 
 TEST_CASE("reflected_struct accepts plain-member aggregates", "[field][concept]") {
@@ -274,4 +269,30 @@ TEST_CASE("reflected_struct accepts plain-member aggregates", "[field][concept]"
     // Plain members (no field<>) ARE reflectable — only meta<> is skipped
     STATIC_REQUIRE(detail::reflected_struct<NoFieldsOnlyPlain>);
 #endif
+}
+
+TEST_CASE("reflected_struct accepts empty aggregates", "[field][concept]") {
+    // An empty struct is reflectable — it just has zero fields. Lets users
+    // start with `struct Foo {};` and grow into it without the framework
+    // refusing to compile mid-build-out.
+    STATIC_REQUIRE(detail::reflected_struct<EmptyStruct>);
+}
+
+TEST_CASE("empty aggregates work end-to-end", "[field][empty]") {
+    type_def<EmptyStruct> t;
+    REQUIRE(t.field_count() == 0);
+    REQUIRE(t.field_names().empty());
+
+    EmptyStruct e;
+    auto j = to_json(e);
+    REQUIRE(j.is_object());
+    REQUIRE(j.empty());
+
+    REQUIRE(to_json_string(e) == "{}");
+
+    auto round = from_json<EmptyStruct>(nlohmann::json::object());
+    (void)round;
+
+    auto from_str = from_json<EmptyStruct>(std::string("{}"));
+    (void)from_str;
 }

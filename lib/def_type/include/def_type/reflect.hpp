@@ -215,25 +215,6 @@ inline constexpr bool has_pfr_backend = false;
 
 namespace detail {
 
-    template <typename T, std::size_t... Is>
-    consteval bool any_member_is_reflectable(std::index_sequence<Is...>) {
-        return (!is_meta<member_type<Is, T>> || ...);
-    }
-
-    template <typename T>
-    consteval bool has_any_reflectable_member() {
-        if constexpr (!std::is_aggregate_v<T>) {
-            return false;
-        } else {
-            constexpr auto N = dispatch_field_count<T>();
-            if constexpr (N == 0) {
-                return false;
-            } else {
-                return any_member_is_reflectable<T>(std::make_index_sequence<N>{});
-            }
-        }
-    }
-
     // Count reflectable members (everything except meta<>)
     template <typename T, std::size_t... Is>
     consteval std::size_t count_field_members(std::index_sequence<Is...>) {
@@ -241,9 +222,7 @@ namespace detail {
     }
 
     template <typename T>
-    concept reflected_struct =
-        std::is_aggregate_v<T>
-        && has_any_reflectable_member<T>();
+    concept reflected_struct = std::is_aggregate_v<T>;
 
     template <typename T>
     consteval std::size_t field_count() {
