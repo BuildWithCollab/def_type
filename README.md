@@ -628,7 +628,7 @@ struct Pet {
     field<std::string>                   name;
     field<Color>                         color;      // serialized as "red", "green", "blue"
     field<std::vector<std::string>>      tags;       // JSON array
-    field<std::optional<std::string>>    nickname;   // null or string
+    field<std::optional<std::string>>    nickname;   // omitted when empty, otherwise string
     field<std::map<std::string, int>>    scores;     // JSON object
 };
 
@@ -651,6 +651,26 @@ auto j = to_json(p);
 auto restored = from_json<Pet>(j);
 // Everything round-trips correctly
 ```
+
+**Empty `std::optional<T>` is omitted from the JSON output** — it does not emit `null`. This matches how most protocols (JSON-RPC 2.0, OpenAPI/JSON Schema, ACP) distinguish absent from null:
+
+```cpp
+Pet stray;
+stray.name = "Whiskers";
+stray.color = Color::green;
+// nickname is left empty (std::nullopt)
+
+auto j = to_json(stray);
+// {
+//   "name": "Whiskers",
+//   "color": "green",
+//   "tags": [],
+//   "scores": {}
+//   // ← no "nickname" key at all
+// }
+```
+
+On the way in, `from_json` accepts both shapes — an absent key and a `null` value both deserialize to `std::nullopt`.
 
 ### Nested Structs in JSON
 
