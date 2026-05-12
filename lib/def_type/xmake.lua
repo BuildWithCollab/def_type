@@ -20,6 +20,7 @@ if get_config("build_tests") then
         add_deps("def_type")
         add_packages("catch2")
         set_rundir("$(projectdir)")
+        add_tests("default", {runargs = {"--durations", "yes"}})
 
         on_load(function (target)
             if target:is_plat("wasm") then
