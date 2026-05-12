@@ -1140,9 +1140,18 @@ auto j = obj.to_json();
 
 ## Validation
 
+Validators in `def_type` come in two shapes. Both are just structs with `operator()` returning `std::vector<validation_error>` — empty vector means valid, any entries mean invalid. The only differences are *what they receive* and *where you attach them*.
+
+| Kind | Receives | Attaches via |
+|---|---|---|
+| **Field validator** | the field's value (`const T&`) | `field<T>{.validators = validators(...)}` (typed) or `.field<V>(name, validators(...))` (dynamic) |
+| **Whole-struct validator** | the whole instance — `const T&` (typed) or `const type_instance&` (dynamic) | `type_validators<Vs...>` marker member (typed) or `.validators(...)` on the builder (dynamic) |
+
+Both kinds run together when you call `valid()` / `validate()` / `parse()`, and everything in the rest of this section — built-ins, writing your own, multi-finding, `.code` / `.data` / `.sub_path`, "doesn't block I/O", nesting recursion — applies to both unless explicitly noted.
+
 ### Built-in Validators
 
-def_type ships with a few validators in the `def_type::validations` namespace. These are convenience validators — you'll likely write your own for anything domain-specific (see [Custom Validators](#custom-validators) below).
+def_type ships with a few field-level built-ins in the `def_type::validations` namespace. They're domain-agnostic convenience helpers — you'll likely write your own for anything specific (see [Writing Your Own](#writing-your-own) below).
 
 ```cpp
 using namespace def_type::validations;
@@ -1178,24 +1187,11 @@ struct Config {
 };
 ```
 
-### Dynamic — Validators Without Default Value
+### Writing Your Own
 
-You can attach validators without providing a default — the field gets the type's default (e.g. `""` for string, `0` for int):
+A validator is a struct with `operator()` returning `std::vector<validation_error>`. No base class, no registration, no macros. The framework fills `.validator` (via `nameof`) and joins your optional `.sub_path` into `.path` — you fill `.message` and any of `.code` / `.sub_path` / `.data`.
 
-```cpp
-auto t = type_def("Dog")
-    .field<std::string>("name", validators(not_empty{}))
-    .field<int>("age", validators(in_range{.min = 1, .max = 999}));
-```
-
-### Custom Validators
-
-Writing your own validator is trivial — it's just a struct with `operator()`. The contract:
-
-- Takes `const T&` (the field value)
-- Returns `std::vector<validation_error>` — empty means valid, one or more entries means invalid
-
-That's it. No base class, no registration, no macros:
+**Field validator** — receives the field's value:
 
 ```cpp
 struct starts_with_uppercase {
@@ -1205,18 +1201,152 @@ struct starts_with_uppercase {
         return { { .message = std::format("'{}' must start with an uppercase letter", value) } };
     }
 };
-
-// Use them just like built-in validators:
-auto t = type_def("Dog")
-    .field<std::string>("name", validators(not_empty{}, starts_with_uppercase{}))
-    .field<int>("age", validators(in_range{.min = 0, .max = 25}));
 ```
 
-For the common "one rule, one message" validator, the designated-init form `{ { .message = "..." } }` keeps it to a single line. The next section covers what to do when one validator has more than one thing to say.
+**Whole-struct validator** — receives the whole instance. Typed validators take `const T&` and read fields directly. Dynamic validators take `const type_instance&` and probe by field name:
+
+```cpp
+// Typed — direct field access
+struct passwords_match {
+    std::vector<validation_error> operator()(const SignupForm& s) const {
+        if (s.password.value == s.confirm.value) return {};
+        return { { .message  = "passwords do not match",
+                   .code     = "password_mismatch",
+                   .sub_path = "confirm" } };
+    }
+};
+
+// Dynamic — runtime probing
+struct passwords_match {
+    std::vector<validation_error> operator()(const type_instance& obj) const {
+        if (obj.get<std::string>("password") == obj.get<std::string>("confirm"))
+            return {};
+        return { { .message  = "passwords do not match",
+                   .code     = "password_mismatch",
+                   .sub_path = "confirm" } };
+    }
+};
+```
+
+For the common "one rule, one message" validator, the designated-init form `{ { .message = "..." } }` keeps it to a single line. For more, see [Structured Findings](#structured-findings--code-data-and-multi-finding-validators).
+
+### Attaching to Fields
+
+**Typed path** — set `.validators` on a `field<T>`:
+
+```cpp
+struct Dog {
+    field<std::string> name {
+        .value = "",
+        .validators = validators(not_empty{}, starts_with_uppercase{})
+    };
+    field<int> age {
+        .value = 0,
+        .validators = validators(in_range{.min = 0, .max = 25})
+    };
+};
+```
+
+**Dynamic path** — pass `validators(...)` to `.field<V>(...)`:
+
+```cpp
+auto t = type_def("Dog")
+    .field<std::string>("name", std::string(""),
+        validators(not_empty{}, starts_with_uppercase{}))
+    .field<int>("age", 0,
+        validators(in_range{.min = 0, .max = 25}));
+```
+
+On the dynamic builder you can also skip the default value — the field gets the type's default (`""` for string, `0` for int):
+
+```cpp
+auto t = type_def("Dog")
+    .field<std::string>("name", validators(not_empty{}))
+    .field<int>("age", validators(in_range{.min = 1, .max = 999}));
+```
+
+### Attaching to the Whole Struct
+
+Whole-struct validators attach via `type_validators<Vs...>` on the typed path and `.validators(...)` on the dynamic builder.
+
+**Typed path — `type_validators<>` marker.** It's the type-level counterpart to `meta<>`: a member that holds validation rules, discovered by the framework, invisible to everything else (not counted by `field_count`, not visited by `for_each_field`, not addressable via `set` / `get` / `has_field`, not emitted by `to_json`, ignored by `from_json`).
+
+```cpp
+struct SignupForm {
+    type_validators<passwords_match> rules { passwords_match{} };
+
+    field<std::string> password { .value = "", .validators = validators(not_empty{}) };
+    field<std::string> confirm  { .value = "", .validators = validators(not_empty{}) };
+    field<bool>        terms    { .value = false };
+};
+
+SignupForm form;
+form.password = "abc";
+form.confirm  = "xyz";
+
+auto result = type_def<SignupForm>{}.validate(form);
+result.error_count();              // 1
+result.errors()[0].path;           // "confirm"
+result.errors()[0].validator;      // "passwords_match"
+```
+
+Multiple rules in one marker, or multiple markers — both additive:
+
+```cpp
+// One marker, several rules
+type_validators<passwords_match, terms_accepted> rules {
+    passwords_match{},
+    terms_accepted{.required = true}
+};
+
+// Or split into multiple markers — group however reads best
+struct SignupForm {
+    type_validators<passwords_match>  cross_field { passwords_match{}  };
+    type_validators<terms_accepted>   policy      { terms_accepted{}   };
+    // ... fields ...
+};
+```
+
+Stateless validators degrade to empty braces: `type_validators<must_be_uppercase> rules{};`.
+
+**Dynamic path — `.validators(...)` on the builder.** Variadic and chainable, both forms additive:
+
+```cpp
+auto signup_t = type_def("SignupForm")
+    .field<std::string>("password", std::string(""), validators(not_empty{}))
+    .field<std::string>("confirm",  std::string(""), validators(not_empty{}))
+    .field<bool>("terms", false)
+    .validators(passwords_match{});
+
+// Equivalent forms:
+.validators(rule_a{}, rule_b{})              // variadic
+.validators(rule_a{}).validators(rule_b{})   // chained
+```
+
+**How `.path` is built for whole-struct findings.** The framework joins the parent field path with the validator-supplied `.sub_path`:
+
+| Parent prefix | `.sub_path` | Resulting `.path` |
+|---|---|---|
+| empty (top-level) | absent | `""` |
+| empty (top-level) | `"confirm"` | `"confirm"` |
+| `"address"` (nested) | absent | `"address"` |
+| `"address"` (nested) | `"zip"` | `"address.zip"` |
+
+To mark *multiple* offending fields, return multiple findings — each with its own `.sub_path` (see [Structured Findings](#structured-findings--code-data-and-multi-finding-validators)).
+
+**Querying which types carry whole-struct rules:**
+
+```cpp
+type_def<SignupForm>{}.has_validators();      // bool — any whole-struct rules?
+type_def<SignupForm>{}.validator_count();     // size_t — total across all markers
+
+signup_t.has_validators();                    // same on the dynamic path
+signup_t.validator_count();
+```
 
 ### valid() — Quick Check
 
-Returns `true` if all validators pass:
+Returns `true` if every validator — field-level and whole-struct, at every level of nesting — passes:
 
 ```cpp
 // Dynamic
@@ -1357,6 +1487,20 @@ struct must_have_inner_field {
 
 Sub-paths compose with nested validation too — a sub-path of `"name"` from a validator on `params` inside an `inner` struct ends up as `"inner.params.name"`.
 
+The same multi-finding pattern is how a whole-struct validator points at several offending fields at once — one finding per field, each with its own `.sub_path`:
+
+```cpp
+struct passwords_match {
+    std::vector<validation_error> operator()(const SignupForm& s) const {
+        if (s.password.value == s.confirm.value) return {};
+        return {
+            {.message = "passwords do not match", .code = "mismatch", .sub_path = "password"},
+            {.message = "passwords do not match", .code = "mismatch", .sub_path = "confirm"},
+        };
+    }
+};
+```
+
 ### Validators Don't Block Other Operations
 
 Invalid values can still be set, retrieved, and serialized — validation is advisory, not enforcement:
@@ -1371,7 +1515,7 @@ obj.valid();                         // false
 
 ### Validators Mixed with Metas
 
-Validators and `with<>` metas compose freely on the same field:
+Validators and `with<>` metas compose freely on the same field, and `type_validators<>` sits alongside `meta<>` on the same struct without conflict:
 
 ```cpp
 auto t = type_def("Dog")
@@ -1390,182 +1534,9 @@ auto obj = t.create();
 obj.valid();  // false — name is "", age is 0
 ```
 
-### Whole-Struct Validators
-
-A field validator runs on one field's value. When the rule lives *between* fields — passwords match, two flags are mutually exclusive, "if A is set then B must be too" — attach a validator to the whole struct.
-
-The validator's shape doesn't change. The only differences are what it receives and where you attach it:
-
-| Path | Validator receives | Attachment point |
-|------|--------------------|------------------|
-| Typed | `const T&` (the whole struct) | `type_validators<Vs...>` marker member |
-| Dynamic | `const type_instance&` | `.validators(...)` on the builder |
-
-The framework still fills `.validator` (via `nameof`) and `.path` (parent field + your optional `.sub_path`). You fill `.message`, and any of `.code` / `.sub_path` / `.data`.
-
-#### Typed path — `type_validators<>` marker
-
-`type_validators<>` is the type-level counterpart to `meta<>`: a member that holds validation rules, discovered by the framework, invisible to everything else.
-
-```cpp
-struct passwords_match {
-    std::vector<validation_error> operator()(const SignupForm& s) const {
-        if (s.password.value == s.confirm.value) return {};
-        return {{.message  = "passwords do not match",
-                 .code     = "password_mismatch",
-                 .sub_path = "confirm"}};
-    }
-};
-
-struct SignupForm {
-    type_validators<passwords_match> rules { passwords_match{} };
-
-    field<std::string> password { .value = "", .validators = validators(not_empty{}) };
-    field<std::string> confirm  { .value = "", .validators = validators(not_empty{}) };
-    field<bool>        terms    { .value = false };
-};
-
-SignupForm form;
-form.password = "abc";
-form.confirm  = "xyz";
-
-auto result = type_def<SignupForm>{}.validate(form);
-result.error_count();              // 1
-result.errors()[0].path;           // "confirm"
-result.errors()[0].validator;      // "passwords_match"
-```
-
-Multiple validators in one marker:
-
-```cpp
-type_validators<passwords_match, terms_accepted> rules {
-    passwords_match{},
-    terms_accepted{.required = true}
-};
-```
-
-Multiple separate markers on the same struct are allowed and additive — group however reads best:
-
-```cpp
-struct SignupForm {
-    type_validators<passwords_match>  cross_field { passwords_match{}  };
-    type_validators<terms_accepted>   policy      { terms_accepted{}   };
-    // ... fields ...
-};
-```
-
-Stateless validators degrade to empty braces:
-
-```cpp
-type_validators<must_be_uppercase> rules{};
-```
-
-#### Dynamic path — `.validators(...)` on the builder
-
-```cpp
-struct passwords_match {
-    std::vector<validation_error> operator()(const type_instance& obj) const {
-        if (obj.get<std::string>("password") == obj.get<std::string>("confirm"))
-            return {};
-        return {{.message  = "passwords do not match",
-                 .code     = "password_mismatch",
-                 .sub_path = "confirm"}};
-    }
-};
-
-auto signup_t = type_def("SignupForm")
-    .field<std::string>("password", std::string(""), validators(not_empty{}))
-    .field<std::string>("confirm",  std::string(""), validators(not_empty{}))
-    .field<bool>("terms", false)
-    .validators(passwords_match{});
-
-auto form = signup_t.create();
-form.set("password", std::string("abc"));
-form.set("confirm",  std::string("xyz"));
-
-auto result = form.validate();
-result.error_count();              // 1
-result.errors()[0].path;           // "confirm"
-result.errors()[0].validator;      // "passwords_match"
-```
-
-`.validators(...)` is variadic and chainable — both forms are additive:
-
-```cpp
-.validators(rule_a{}, rule_b{})              // variadic
-.validators(rule_a{}).validators(rule_b{})   // chained
-```
-
-#### How `.path` is built
-
-When the whole-struct validator returns a finding, the framework joins the parent field path with the validator-supplied `.sub_path`:
-
-| Parent prefix | `.sub_path` | Resulting `.path` |
-|---|---|---|
-| empty (top-level) | absent | `""` |
-| empty (top-level) | `"confirm"` | `"confirm"` |
-| `"address"` (nested) | absent | `"address"` |
-| `"address"` (nested) | `"zip"` | `"address.zip"` |
-
-To mark *multiple* offending fields, return multiple findings — each with its own `.sub_path` — the same multi-finding pattern shown in [Structured Findings](#structured-findings--code-data-and-multi-finding-validators):
-
-```cpp
-struct passwords_match {
-    std::vector<validation_error> operator()(const SignupForm& s) const {
-        if (s.password.value == s.confirm.value) return {};
-        return {
-            {.message = "passwords do not match", .code = "mismatch", .sub_path = "password"},
-            {.message = "passwords do not match", .code = "mismatch", .sub_path = "confirm"},
-        };
-    }
-};
-```
-
-#### Combined with field validators
-
-Field and whole-struct validators run together — every finding lands in one `validation_result`:
-
-```cpp
-struct SignupForm {
-    type_validators<passwords_match> rules { passwords_match{} };
-    field<std::string> password { .value = "", .validators = validators(not_empty{}) };
-    field<std::string> confirm  { .value = "", .validators = validators(not_empty{}) };
-};
-
-SignupForm form;
-form.password = "abc";
-form.confirm  = "xyz";
-
-auto result = type_def<SignupForm>{}.validate(form);
-// 0 field failures (both non-empty), 1 struct failure (mismatch) → 1 total
-```
-
-#### Marker discipline (typed path)
-
-`type_validators<>` is invisible to the rest of the framework — same way `meta<>` is:
-
-- Not counted by `field_count()` / `field_names()`.
-- Not visited by `for_each_field`.
-- Not addressable via `set` / `get` / `has_field` — those throw for the marker's name.
-- Not emitted by `to_json`; ignored on the way in by `from_json`.
-
-#### Querying which types carry rules
-
-```cpp
-type_def<SignupForm>{}.has_validators();      // bool — any struct rules?
-type_def<SignupForm>{}.validator_count();     // size_t — total across all markers
-
-signup_t.has_validators();                    // same on the dynamic path
-signup_t.validator_count();
-```
-
-#### Advisory, same as field validators
-
-Whole-struct validators don't block `set` / `get` / `to_json`. Same advisory model — invalid values pass through every API except `valid()` / `validate()` / `parse(..., {.require_valid = true})`.
-
 ### Nested Validation
 
-Validation recurses into nested type_defs with **dotted paths**. Both field validators *and* whole-struct validators (see [Whole-Struct Validators](#whole-struct-validators)) fire during outer validation, with paths prefixed by the parent field name.
+Validation recurses into nested type_defs with **dotted paths**. Both field validators and whole-struct validators fire during outer validation, with paths prefixed by the parent field name.
 
 **Dynamic nesting:**
 
