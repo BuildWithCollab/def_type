@@ -262,7 +262,7 @@ public:
                     auto nested_result = type_def<InnerType>{}.validate_with_prefix(
                         raw_member.value, full_path);
                     for (auto& error : nested_result.errors())
-                        result.add(validation_error{error.path, error.message, error.constraint});
+                        result.add(error);
                 }
             } else {
                 // Plain member — recurse if it's a reflected struct
@@ -270,7 +270,7 @@ public:
                     auto nested_result = type_def<RawT>{}.validate_with_prefix(
                         raw_member, full_path);
                     for (auto& error : nested_result.errors())
-                        result.add(validation_error{error.path, error.message, error.constraint});
+                        result.add(error);
                 }
             }
         }, indices_{});

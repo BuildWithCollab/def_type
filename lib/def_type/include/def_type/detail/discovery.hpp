@@ -287,14 +287,16 @@ namespace def_type::detail {
             const auto& typed_value = *std::any_cast<FieldType>(&value);
             std::apply([&](const auto&... each_validator) {
                 (([&] {
-                    auto result = each_validator(typed_value);
-                    if (result.has_value()) {
-                        using validator_type = std::remove_cvref_t<decltype(each_validator)>;
-                        errors.push_back({
-                            std::string(field_name),
-                            std::move(*result),
-                            detail::extract_short_validator_name(NAMEOF_TYPE(validator_type))
-                        });
+                    using validator_type = std::remove_cvref_t<decltype(each_validator)>;
+                    auto validator_name = detail::extract_short_validator_name(
+                        NAMEOF_TYPE(validator_type));
+                    auto findings = each_validator(typed_value);
+                    for (auto& finding : findings) {
+                        finding.validator = validator_name;
+                        finding.path = finding.sub_path
+                            ? std::string(field_name) + "." + *finding.sub_path
+                            : std::string(field_name);
+                        errors.push_back(std::move(finding));
                     }
                 }()), ...);
             }, captured_validators);

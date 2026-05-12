@@ -115,8 +115,7 @@ type_def<detail::dynamic_tag>::parse(const nlohmann::json& j) const {
     // Run validation
     auto validation = result.value.validate();
     for (auto& error : validation.errors())
-        result.validation_errors_.push_back(
-            validation_error{error.path, error.message, error.constraint});
+        result.validation_errors_.push_back(error);
 
     return result;
 }
@@ -258,8 +257,7 @@ parse_result<T> type_def<T>::parse(const nlohmann::json& j) const {
     // Validation
     auto validation_check = validate(result.value);
     for (auto& error : validation_check.errors())
-        result.validation_errors_.push_back(
-            validation_error{error.path, error.message, error.constraint});
+        result.validation_errors_.push_back(error);
 
     return result;
 }

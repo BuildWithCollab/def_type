@@ -140,7 +140,7 @@ public:
                 if (const auto* nested = std::any_cast<type_instance>(&values_[i])) {
                     auto nested_result = nested->validate_with_prefix(full_path);
                     for (auto& error : nested_result.errors())
-                        result.add(validation_error{error.path, error.message, error.constraint});
+                        result.add(error);
                 }
             }
         }

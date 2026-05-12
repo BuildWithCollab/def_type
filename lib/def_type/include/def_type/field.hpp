@@ -16,13 +16,14 @@
 
 namespace def_type {
 
-// ── validation_error — shared across all paths ──────────────────────────
-
-struct validation_error {
-    std::string path;
-    std::string message;
-    std::string constraint;
-};
+// validation_error is defined in <def_type/validation.hpp> — it has a
+// std::optional<unknown> member which requires unknown to be a complete
+// type, and unknown depends on reflect.hpp (which depends on field.hpp).
+// Forward-declared here so validator_pack can name it in its templated
+// conversion operator; the body of that operator is not instantiated
+// until user code, by which time the umbrella header has pulled in the
+// full definition.
+struct validation_error;
 
 // ── with<Exts...> ───────────────────────────────────────────────────────
 
@@ -67,14 +68,16 @@ struct validator_pack {
             std::vector<validation_error> errors;
             std::apply([&](const auto&... each_validator) {
                 (([&] {
-                    auto result = each_validator(value);
-                    if (result.has_value()) {
-                        using validator_type = std::remove_cvref_t<decltype(each_validator)>;
-                        errors.push_back({
-                            std::string(field_name),
-                            std::move(*result),
-                            detail::extract_short_validator_name(NAMEOF_TYPE(validator_type))
-                        });
+                    using validator_type = std::remove_cvref_t<decltype(each_validator)>;
+                    auto validator_name = detail::extract_short_validator_name(
+                        NAMEOF_TYPE(validator_type));
+                    auto findings = each_validator(value);
+                    for (auto& finding : findings) {
+                        finding.validator = validator_name;
+                        finding.path = finding.sub_path
+                            ? std::string(field_name) + "." + *finding.sub_path
+                            : std::string(field_name);
+                        errors.push_back(std::move(finding));
                     }
                 }()), ...);
             }, captured);

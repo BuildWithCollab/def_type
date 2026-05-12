@@ -132,9 +132,9 @@ namespace test_unknown_type {
     struct help_meta { const char* summary = ""; };
 
     struct must_parse_as_dog {
-        std::optional<std::string> operator()(const unknown& u) const {
-            if (u.is<Dog>()) return std::nullopt;
-            return std::string("params do not match Dog shape");
+        std::vector<validation_error> operator()(const unknown& u) const {
+            if (u.is<Dog>()) return {};
+            return { { .message = "params do not match Dog shape" } };
         }
     };
 
@@ -417,5 +417,5 @@ TEST_CASE("unknown: field<unknown> with a validator that probes via is<T>()", "[
     auto result = t.validate(req);
     REQUIRE(result.error_count() == 1);
     REQUIRE(result.errors()[0].path == "params");
-    REQUIRE(result.errors()[0].constraint == "must_parse_as_dog");
+    REQUIRE(result.errors()[0].validator == "must_parse_as_dog");
 }

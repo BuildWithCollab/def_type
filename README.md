@@ -128,7 +128,7 @@ t.valid(rex);                     // false
 
 auto result = t.validate(rex);
 result.errors()[0].path;          // "age"
-result.errors()[0].constraint;    // "in_range"
+result.errors()[0].validator;     // "in_range"
 ```
 
 `field<T>` is a transparent wrapper — it *is* the value. Implicit conversion, `operator->`, aggregate initialization:
@@ -1048,9 +1048,9 @@ u = nlohmann::json{{"foo", 1}};
 struct help_meta { const char* summary = ""; };
 
 struct must_parse_as_dog {
-    std::optional<std::string> operator()(const unknown& u) const {
-        if (u.is<Dog>()) return std::nullopt;
-        return std::string("params do not match Dog shape");
+    std::vector<validation_error> operator()(const unknown& u) const {
+        if (u.is<Dog>()) return {};
+        return { { .message = "params do not match Dog shape" } };
     }
 };
 
@@ -1193,16 +1193,16 @@ auto t = type_def("Dog")
 Writing your own validator is trivial — it's just a struct with `operator()`. The contract:
 
 - Takes `const T&` (the field value)
-- Returns `std::optional<std::string>` — `std::nullopt` means valid, a string means invalid (the string is the error message)
+- Returns `std::vector<validation_error>` — empty means valid, one or more entries means invalid
 
 That's it. No base class, no registration, no macros:
 
 ```cpp
 struct starts_with_uppercase {
-    std::optional<std::string> operator()(const std::string& value) const {
+    std::vector<validation_error> operator()(const std::string& value) const {
         if (value.empty() || std::isupper(static_cast<unsigned char>(value[0])))
-            return std::nullopt;
-        return std::format("'{}' must start with an uppercase letter", value);
+            return {};
+        return { { .message = std::format("'{}' must start with an uppercase letter", value) } };
     }
 };
 
@@ -1211,6 +1211,8 @@ auto t = type_def("Dog")
     .field<std::string>("name", validators(not_empty{}, starts_with_uppercase{}))
     .field<int>("age", validators(in_range{.min = 0, .max = 25}));
 ```
+
+For the common "one rule, one message" validator, the designated-init form `{ { .message = "..." } }` keeps it to a single line. The next section covers what to do when one validator has more than one thing to say.
 
 ### valid() — Quick Check
 
@@ -1245,11 +1247,115 @@ result.error_count();          // number of errors
 !result;                       // same as !result.ok() — operator bool
 
 for (auto& error : result.errors()) {
-    error.path;       // field name, e.g. "name"
-    error.constraint; // validator name, e.g. "not_empty"
-    error.message;    // human-readable message
+    // Always present:
+    error.message;        // std::string — human-readable, default-rendered prose
+    error.path;           // std::string — final field path, e.g. "address.zip"
+    error.validator;      // std::string — validator struct name, e.g. "not_empty"
+
+    // Optional — populated only when the validator opted in:
+    error.code;           // std::optional<std::string> — stable id for this finding
+    error.sub_path;       // std::optional<std::string> — position inside the value
+    error.data;           // std::optional<unknown>     — typed user struct with extras
 }
 ```
+
+**Who fills what:** validators fill `.message` (required) and may fill `.code`, `.sub_path`, `.data`. The framework fills `.path` (field name joined with `sub_path`) and `.validator` (the struct's name via `nameof`). Anything a validator writes into `.path` or `.validator` gets overwritten.
+
+### Structured Findings — `.code`, `.data`, and Multi-Finding Validators
+
+Sometimes one validator has more than one thing to say. A password-policy check can fail for "too short," "missing uppercase," and "missing digit" all at the same time — and you want each of those as a separate `validation_error` so consumers (UI, telemetry, i18n) can act on them individually.
+
+The validator just returns a vector with more than one entry:
+
+```cpp
+struct password_policy {
+    std::vector<validation_error> operator()(const std::string& v) const {
+        std::vector<validation_error> findings;
+        if (v.size() < 8)
+            findings.push_back({.message = "must be at least 8 characters",
+                                .code = "too_short"});
+        bool has_upper = false, has_digit = false;
+        for (char c : v) {
+            if (c >= 'A' && c <= 'Z') has_upper = true;
+            if (c >= '0' && c <= '9') has_digit = true;
+        }
+        if (!has_upper)
+            findings.push_back({.message = "must contain an uppercase letter",
+                                .code = "missing_uppercase"});
+        if (!has_digit)
+            findings.push_back({.message = "must contain a digit",
+                                .code = "missing_digit"});
+        return findings;
+    }
+};
+```
+
+All three findings carry `error.validator == "password_policy"` and the same field path — but each has a distinct `.code` the consumer can switch on:
+
+```cpp
+for (auto& error : result.errors()) {
+    if (error.code == "too_short")           ui.show_strength_meter();
+    else if (error.code == "missing_uppercase") telemetry.bump("pw.no_upper");
+    else if (error.code == "missing_digit")     telemetry.bump("pw.no_digit");
+}
+```
+
+**`.data` — typed structured extras.** When a finding has data the consumer might want as something other than text (numeric bounds, a list of valid choices, a referenced field), attach a user struct via `unknown`:
+
+```cpp
+struct too_short_data          { int min; int actual; };
+struct missing_char_class_data { std::string class_name; };
+
+struct password_policy_with_data {
+    std::vector<validation_error> operator()(const std::string& v) const {
+        std::vector<validation_error> findings;
+        if (v.size() < 8)
+            findings.push_back({
+                .message = "must be at least 8 characters",
+                .code    = "too_short",
+                .data    = unknown{too_short_data{.min = 8, .actual = (int)v.size()}}
+            });
+        // ...
+        return findings;
+    }
+};
+```
+
+The consumer reads the typed data back with the same `.is<T>()` / `.try_as<T>()` API used everywhere else in the library:
+
+```cpp
+for (auto& error : result.errors()) {
+    if (auto data = error.data ? error.data->try_as<too_short_data>() : std::nullopt; data)
+        ui.show_hint(std::format("Need {} chars, got {}", data->min, data->actual));
+}
+```
+
+The struct type can be anything reflected — primitives, containers, nested reflected structs all work.
+
+**`.sub_path` — pointing inside a value.** When a validator looks at structured data (`unknown`, a nested struct, a vector) and finds an issue at a *position inside* the value, it reports that position in `.sub_path`. The framework concatenates it with the field's path using a dot:
+
+```cpp
+struct must_have_inner_field {
+    std::vector<validation_error> operator()(const unknown& u) const {
+        std::vector<validation_error> findings;
+        if (!u.is<std::string>("name"))
+            findings.push_back({.message = "missing inner 'name'",
+                                .code = "missing_name",
+                                .sub_path = "name"});
+        if (!u.is<int>("age"))
+            findings.push_back({.message = "missing inner 'age'",
+                                .code = "missing_age",
+                                .sub_path = "age"});
+        return findings;
+    }
+};
+
+// On a field named "params", the framework produces:
+//   error.path == "params.name"     error.sub_path == "name"
+//   error.path == "params.age"      error.sub_path == "age"
+```
+
+Sub-paths compose with nested validation too — a sub-path of `"name"` from a validator on `params` inside an `inner` struct ends up as `"inner.params.name"`.
 
 ### Validators Don't Block Other Operations
 
@@ -1359,7 +1465,7 @@ result.has_missing_fields();       // true — "breed"
 
 result.extra_keys();               // ["unknown"]
 result.missing_fields();           // ["breed"]
-result.validation_errors();        // [{path: "name", constraint: "not_empty", ...}]
+result.validation_errors();        // [{path: "name", validator: "not_empty", ...}]
 
 // The object is always fully populated — even when invalid
 result->get<std::string>("name");  // ""

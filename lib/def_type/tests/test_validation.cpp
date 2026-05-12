@@ -41,7 +41,7 @@ TEST_CASE("spike: validate() returns errors with details", "[validation][spike]"
     REQUIRE(!result);
     REQUIRE(result.error_count() == 1);
     REQUIRE(result.errors()[0].path == "name");
-    REQUIRE(result.errors()[0].constraint == "not_empty");
+    REQUIRE(result.errors()[0].validator == "not_empty");
     REQUIRE(!result.errors()[0].message.empty());
 }
 
@@ -212,10 +212,10 @@ TEST_CASE("spike: metas before validators in same field call", "[validation][dyn
 // ═════════════════════════════════════════════════════════════════════════
 
 struct starts_with_uppercase {
-    std::optional<std::string> operator()(const std::string& value) const {
+    std::vector<validation_error> operator()(const std::string& value) const {
         if (value.empty() || std::isupper(static_cast<unsigned char>(value[0])))
-            return std::nullopt;
-        return std::format("'{}' must start with an uppercase letter", value);
+            return {};
+        return { { .message = std::format("'{}' must start with an uppercase letter", value) } };
     }
 };
 
@@ -230,7 +230,7 @@ TEST_CASE("spike: custom validator — basic contract", "[validation][dynamic][c
     auto result = dog.validate();
     REQUIRE(result.error_count() == 1);
     REQUIRE(result.errors()[0].path == "name");
-    REQUIRE(result.errors()[0].constraint == "starts_with_uppercase");
+    REQUIRE(result.errors()[0].validator == "starts_with_uppercase");
     REQUIRE(result.errors()[0].message.find("uppercase") != std::string::npos);
 
     dog.set("name", std::string("Rex"));
@@ -249,7 +249,7 @@ TEST_CASE("spike: custom validator with parameters", "[validation][dynamic][cust
     REQUIRE(!dog.valid());
 
     auto result = dog.validate();
-    REQUIRE(result.errors()[0].constraint == "in_range");
+    REQUIRE(result.errors()[0].validator == "in_range");
     REQUIRE(result.errors()[0].message.find("30") != std::string::npos);
 
     dog.set("age", 15);
@@ -572,13 +572,13 @@ TEST_CASE("typed: validate() collects all errors", "[validation][typed]") {
     REQUIRE(result.errors()[1].path == "age");
 }
 
-TEST_CASE("typed: validate() reports constraint names", "[validation][typed]") {
+TEST_CASE("typed: validate() reports validator names", "[validation][typed]") {
     ValidatedDog dog;
     type_def<ValidatedDog> dog_type;
 
     auto result = dog_type.validate(dog);
-    REQUIRE(result.errors()[0].constraint == "not_empty");
-    REQUIRE(result.errors()[1].constraint == "in_range");
+    REQUIRE(result.errors()[0].validator == "not_empty");
+    REQUIRE(result.errors()[1].validator == "in_range");
 }
 
 TEST_CASE("typed: fields without validators always pass", "[validation][typed]") {
@@ -638,9 +638,9 @@ TEST_CASE("typed (ex-hybrid): validate() collects all errors", "[validation][typ
     REQUIRE(!result);
     REQUIRE(result.error_count() == 2);
     REQUIRE(result.errors()[0].path == "name");
-    REQUIRE(result.errors()[0].constraint == "not_empty");
+    REQUIRE(result.errors()[0].validator == "not_empty");
     REQUIRE(result.errors()[1].path == "age");
-    REQUIRE(result.errors()[1].constraint == "in_range");
+    REQUIRE(result.errors()[1].validator == "in_range");
 }
 
 TEST_CASE("typed (ex-hybrid): fixing values makes validation pass", "[validation][typed]") {
@@ -1390,7 +1390,7 @@ TEST_CASE("dynamic: validators without default — validate returns errors", "[v
     auto result = dog.validate();
     REQUIRE(result.error_count() == 1);
     REQUIRE(result.errors()[0].path == "name");
-    REQUIRE(result.errors()[0].constraint == "not_empty");
+    REQUIRE(result.errors()[0].validator == "not_empty");
 }
 
 TEST_CASE("dynamic: validators without default — parse works", "[validation][dynamic][parse]") {
@@ -1477,4 +1477,255 @@ TEST_CASE("typed: validators + metas on same field — parse works", "[validatio
     REQUIRE(result.validation_errors().size() == 2);
     REQUIRE(result->name.value == "");
     REQUIRE(result->age.value == -1);
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// New return shape: vector<validation_error>
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("validator: returns empty vector for valid input", "[validation][shape]") {
+    auto t = type_def("Thing")
+        .field<std::string>("name", std::string("ok"), validators(not_empty{}));
+    auto obj = t.create();
+    REQUIRE(obj.valid());
+    REQUIRE(obj.validate().error_count() == 0);
+}
+
+// ── Multi-finding validator — one validator emits N validation_errors ───
+
+struct password_policy {
+    std::vector<validation_error> operator()(const std::string& v) const {
+        std::vector<validation_error> findings;
+        if (v.size() < 8)
+            findings.push_back({.message = "must be at least 8 characters",
+                                .code = "too_short"});
+        bool has_upper = false, has_digit = false;
+        for (char c : v) {
+            if (c >= 'A' && c <= 'Z') has_upper = true;
+            if (c >= '0' && c <= '9') has_digit = true;
+        }
+        if (!has_upper)
+            findings.push_back({.message = "must contain an uppercase letter",
+                                .code = "missing_uppercase"});
+        if (!has_digit)
+            findings.push_back({.message = "must contain a digit",
+                                .code = "missing_digit"});
+        return findings;
+    }
+};
+
+TEST_CASE("validator: one validator emits multiple findings", "[validation][shape]") {
+    auto t = type_def("Account")
+        .field<std::string>("password", std::string("abc"),
+            validators(password_policy{}));
+    auto obj = t.create();
+
+    auto result = obj.validate();
+    REQUIRE(result.error_count() == 3);
+
+    REQUIRE(result.errors()[0].validator == "password_policy");
+    REQUIRE(result.errors()[1].validator == "password_policy");
+    REQUIRE(result.errors()[2].validator == "password_policy");
+
+    REQUIRE(result.errors()[0].path == "password");
+    REQUIRE(result.errors()[1].path == "password");
+    REQUIRE(result.errors()[2].path == "password");
+
+    REQUIRE(result.errors()[0].code.has_value());
+    REQUIRE(*result.errors()[0].code == "too_short");
+    REQUIRE(*result.errors()[1].code == "missing_uppercase");
+    REQUIRE(*result.errors()[2].code == "missing_digit");
+}
+
+TEST_CASE("validator: multi-finding empties when input passes all", "[validation][shape]") {
+    auto t = type_def("Account")
+        .field<std::string>("password", std::string("Strong42"),
+            validators(password_policy{}));
+    auto obj = t.create();
+    REQUIRE(obj.valid());
+    REQUIRE(obj.validate().error_count() == 0);
+}
+
+// ── .code is optional — built-ins leave it absent ───────────────────────
+
+TEST_CASE("validator: built-ins leave .code absent", "[validation][shape]") {
+    auto t = type_def("Thing")
+        .field<std::string>("name", std::string(""),
+            validators(not_empty{}));
+    auto obj = t.create();
+    auto result = obj.validate();
+
+    REQUIRE(result.error_count() == 1);
+    REQUIRE(!result.errors()[0].code.has_value());
+}
+
+// ── .sub_path — validator points inside the value, framework joins it ──
+
+struct must_have_inner_field {
+    std::vector<validation_error> operator()(const unknown& u) const {
+        std::vector<validation_error> findings;
+        if (!u.is<std::string>("name"))
+            findings.push_back({.message = "missing inner 'name'",
+                                .code = "missing_name",
+                                .sub_path = "name"});
+        if (!u.is<int>("age"))
+            findings.push_back({.message = "missing inner 'age'",
+                                .code = "missing_age",
+                                .sub_path = "age"});
+        return findings;
+    }
+};
+
+TEST_CASE("validator: sub_path joins into final path with dot", "[validation][shape][sub_path]") {
+    auto t = type_def("Request")
+        .field<unknown>("params", validators(must_have_inner_field{}));
+
+    auto obj = t.create();
+    obj.set("params", unknown{nlohmann::json{{"unrelated", true}}});
+
+    auto result = obj.validate();
+    REQUIRE(result.error_count() == 2);
+
+    REQUIRE(result.errors()[0].path == "params.name");
+    REQUIRE(result.errors()[1].path == "params.age");
+
+    REQUIRE(result.errors()[0].sub_path.has_value());
+    REQUIRE(*result.errors()[0].sub_path == "name");
+    REQUIRE(*result.errors()[1].sub_path == "age");
+}
+
+TEST_CASE("validator: sub_path absent uses field name as path", "[validation][shape][sub_path]") {
+    auto t = type_def("Thing")
+        .field<std::string>("name", std::string(""), validators(not_empty{}));
+    auto obj = t.create();
+    auto result = obj.validate();
+
+    REQUIRE(result.error_count() == 1);
+    REQUIRE(result.errors()[0].path == "name");
+    REQUIRE(!result.errors()[0].sub_path.has_value());
+}
+
+// ── Framework overwrites .path and .validator even if validator sets them ─
+
+struct tries_to_set_framework_fields {
+    std::vector<validation_error> operator()(const std::string&) const {
+        return { {
+            .message = "I tried to be sneaky",
+            .path = "fake_path",
+            .validator = "fake_name"
+        } };
+    }
+};
+
+TEST_CASE("validator: framework overwrites .path and .validator", "[validation][shape]") {
+    auto t = type_def("Thing")
+        .field<std::string>("name", std::string(""),
+            validators(tries_to_set_framework_fields{}));
+    auto obj = t.create();
+    auto result = obj.validate();
+
+    REQUIRE(result.error_count() == 1);
+    REQUIRE(result.errors()[0].path == "name");
+    REQUIRE(result.errors()[0].validator == "tries_to_set_framework_fields");
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// .data — validator attaches a typed user struct via `unknown`
+// ═════════════════════════════════════════════════════════════════════════
+
+struct too_short_data {
+    int min;
+    int actual;
+};
+
+struct missing_char_class_data {
+    std::string class_name;
+};
+
+struct password_policy_with_data {
+    std::vector<validation_error> operator()(const std::string& v) const {
+        std::vector<validation_error> findings;
+        if (v.size() < 8)
+            findings.push_back({
+                .message = "must be at least 8 characters",
+                .code = "too_short",
+                .data = unknown{too_short_data{.min = 8, .actual = (int)v.size()}}
+            });
+        bool has_upper = false;
+        for (char c : v) if (c >= 'A' && c <= 'Z') { has_upper = true; break; }
+        if (!has_upper)
+            findings.push_back({
+                .message = "must contain an uppercase letter",
+                .code = "missing_char_class",
+                .data = unknown{missing_char_class_data{.class_name = "uppercase"}}
+            });
+        return findings;
+    }
+};
+
+TEST_CASE("validator: .data carries typed user struct, probed with try_as", "[validation][shape][data]") {
+    auto t = type_def("Account")
+        .field<std::string>("password", std::string("abc"),
+            validators(password_policy_with_data{}));
+    auto obj = t.create();
+    auto result = obj.validate();
+
+    REQUIRE(result.error_count() == 2);
+
+    const auto& first = result.errors()[0];
+    REQUIRE(first.data.has_value());
+    auto first_data = first.data->try_as<too_short_data>();
+    REQUIRE(first_data.has_value());
+    REQUIRE(first_data->min == 8);
+    REQUIRE(first_data->actual == 3);
+
+    const auto& second = result.errors()[1];
+    REQUIRE(second.data.has_value());
+    auto second_data = second.data->try_as<missing_char_class_data>();
+    REQUIRE(second_data.has_value());
+    REQUIRE(second_data->class_name == "uppercase");
+}
+
+TEST_CASE("validator: .data probe with wrong type returns nullopt", "[validation][shape][data]") {
+    auto t = type_def("Account")
+        .field<std::string>("password", std::string("abc"),
+            validators(password_policy_with_data{}));
+    auto obj = t.create();
+    auto result = obj.validate();
+
+    REQUIRE(result.errors()[0].data.has_value());
+    REQUIRE(!result.errors()[0].data->try_as<missing_char_class_data>().has_value());
+}
+
+TEST_CASE("validator: .data is absent for validators that don't set it", "[validation][shape][data]") {
+    auto t = type_def("Thing")
+        .field<std::string>("name", std::string(""), validators(not_empty{}));
+    auto obj = t.create();
+    auto result = obj.validate();
+
+    REQUIRE(result.error_count() == 1);
+    REQUIRE(!result.errors()[0].data.has_value());
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Nested validation composes with sub_path
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("nested: validator sub_path composes with outer field prefix", "[validation][shape][nested]") {
+    auto inner_type = type_def("Inner")
+        .field<unknown>("payload", validators(must_have_inner_field{}));
+
+    auto outer_type = type_def("Outer")
+        .field<std::string>("label", std::string("ok"))
+        .field("inner", inner_type);
+
+    auto outer = outer_type.create();
+    auto inner_obj = outer.get<type_instance>("inner");
+    inner_obj.set("payload", unknown{nlohmann::json{{"unrelated", true}}});
+    outer.set("inner", inner_obj);
+
+    auto result = outer.validate();
+    REQUIRE(result.error_count() == 2);
+    REQUIRE(result.errors()[0].path == "inner.payload.name");
+    REQUIRE(result.errors()[1].path == "inner.payload.age");
 }
