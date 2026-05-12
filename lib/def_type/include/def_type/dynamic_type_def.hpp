@@ -12,6 +12,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <nameof.hpp>
+
 #include <def_type/field.hpp>
 #include <def_type/validation.hpp>
 #include <def_type/parse.hpp>
@@ -30,9 +32,17 @@ template <>
 class type_def<detail::dynamic_tag> {
     friend class type_instance;
 
-    std::string                           name_;
+public:
+    struct struct_validator_entry {
+        std::string name;
+        std::function<std::vector<validation_error>(const type_instance&)> fn;
+    };
+
+private:
+    std::string                            name_;
     std::vector<detail::dynamic_field_def> fields_;
     std::vector<detail::meta_entry>        type_metas_;
+    std::vector<struct_validator_entry>    struct_validators_;
 
 public:
     explicit type_def(std::string_view name) : name_(name) {}
@@ -137,6 +147,32 @@ public:
         type_metas_.push_back({typeid(M), std::any(std::move(value))});
         return *this;
     }
+
+    // ── Struct-level validator builder ───────────────────────────────
+    //
+    // .validators(rule1{}, rule2{}, ...) attaches validators that
+    // receive the whole type_instance. Each rule is a struct with
+    //   std::vector<validation_error> operator()(const type_instance&) const;
+    // Multiple .validators(...) calls are additive.
+
+    template <typename... Vs>
+    type_def& validators(Vs... vs) {
+        auto register_one = [this](auto v) {
+            using V = std::remove_cvref_t<decltype(v)>;
+            auto name = detail::extract_short_validator_name(NAMEOF_TYPE(V));
+            std::function<std::vector<validation_error>(const type_instance&)> fn =
+                [validator = std::move(v)](const type_instance& obj)
+                    -> std::vector<validation_error> {
+                    return validator(obj);
+                };
+            struct_validators_.push_back({std::move(name), std::move(fn)});
+        };
+        (register_one(std::move(vs)), ...);
+        return *this;
+    }
+
+    bool has_validators() const { return !struct_validators_.empty(); }
+    std::size_t validator_count() const { return struct_validators_.size(); }
 
     // ── Field queries ────────────────────────────────────────────────
 

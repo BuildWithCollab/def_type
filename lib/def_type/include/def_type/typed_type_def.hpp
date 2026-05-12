@@ -205,6 +205,16 @@ public:
             std::string(fname) + "'");
     }
 
+    // ── Struct-level validator queries ──────────────────────────────
+
+    constexpr bool has_validators() const {
+        return detail::count_struct_validators<T>() > 0;
+    }
+
+    constexpr std::size_t validator_count() const {
+        return detail::count_struct_validators<T>();
+    }
+
     // ── Validation ────────────────────────────────────────────────────
     //
     // valid(instance) — fast bool, short-circuits on first failure.
@@ -234,7 +244,8 @@ public:
                 }
             }
         }, indices_{});
-        return is_valid;
+        if (!is_valid) return false;
+        return detail::check_all_struct_validators(obj, indices_{});
     }
 
     validation_result validate(const T& obj) const {
@@ -274,6 +285,7 @@ public:
                 }
             }
         }, indices_{});
+        detail::run_struct_validators(obj, result, prefix, indices_{});
         return result;
     }
 

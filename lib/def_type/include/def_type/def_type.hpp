@@ -2,6 +2,7 @@
 
 #include <def_type/field.hpp>
 #include <def_type/meta.hpp>
+#include <def_type/validators.hpp>
 #include <def_type/detail/pfr_backend.hpp>
 #include <def_type/detail/registry_backend.hpp>
 #include <def_type/reflect.hpp>

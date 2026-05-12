@@ -8,6 +8,7 @@
 
 #include <def_type/field.hpp>
 #include <def_type/meta.hpp>
+#include <def_type/validators.hpp>
 #include <def_type/detail/pfr_backend.hpp>
 #include <def_type/detail/registry_backend.hpp>
 
@@ -215,10 +216,16 @@ inline constexpr bool has_pfr_backend = false;
 
 namespace detail {
 
-    // Count reflectable members (everything except meta<>)
+    // True when this member contributes a real data field (not meta<> or type_validators<>).
+    template <typename M>
+    concept is_data_member =
+        !is_meta<std::remove_cvref_t<M>> &&
+        !is_type_validators<std::remove_cvref_t<M>>;
+
+    // Count reflectable members (excludes meta<> and type_validators<>)
     template <typename T, std::size_t... Is>
     consteval std::size_t count_field_members(std::index_sequence<Is...>) {
-        return (0 + ... + (!is_meta<member_type<Is, T>> ? 1 : 0));
+        return (0 + ... + (is_data_member<member_type<Is, T>> ? 1 : 0));
     }
 
     template <typename T>
@@ -240,16 +247,14 @@ namespace detail {
 
 namespace detail {
 
-    // Collect reflectable member names into an array (everything except meta<>)
+    // Collect reflectable member names into an array (excludes meta<> and type_validators<>)
     template <typename T, std::size_t... Is>
     constexpr auto collect_field_names(std::index_sequence<Is...>) {
         constexpr std::size_t total = sizeof...(Is);
-        // First pass: count non-meta members
-        constexpr std::size_t field_n = (0 + ... + (!is_meta<member_type<Is, T>> ? 1 : 0));
-        // Second pass: collect their names
+        constexpr std::size_t field_n = (0 + ... + (is_data_member<member_type<Is, T>> ? 1 : 0));
         std::array<std::string_view, field_n> result{};
         std::size_t idx = 0;
-        ((!is_meta<member_type<Is, T>>
+        ((is_data_member<member_type<Is, T>>
             ? (result[idx++] = dispatch_field_name_rt<Is, T>(), 0) : 0), ...);
         return result;
     }

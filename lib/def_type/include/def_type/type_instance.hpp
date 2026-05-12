@@ -114,6 +114,11 @@ public:
                 }
             }
         }
+        // Struct-level validators
+        for (auto& entry : type_->struct_validators_) {
+            auto errors = entry.fn(*this);
+            if (!errors.empty()) return false;
+        }
         return true;
     }
 
@@ -142,6 +147,21 @@ public:
                     for (auto& error : nested_result.errors())
                         result.add(error);
                 }
+            }
+        }
+        // Struct-level validators
+        for (auto& entry : type_->struct_validators_) {
+            auto findings = entry.fn(*this);
+            for (auto& finding : findings) {
+                finding.validator = entry.name;
+                if (finding.sub_path) {
+                    finding.path = prefix.empty()
+                        ? *finding.sub_path
+                        : std::string(prefix) + "." + *finding.sub_path;
+                } else {
+                    finding.path = std::string(prefix);
+                }
+                result.add(std::move(finding));
             }
         }
         return result;

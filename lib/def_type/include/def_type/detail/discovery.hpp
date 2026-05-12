@@ -18,6 +18,8 @@
 #include <def_type/meta.hpp>
 #include <def_type/reflect.hpp>
 #include <def_type/validation.hpp>
+#include <def_type/validators.hpp>
+#include <def_type/parse.hpp>
 
 namespace def_type::detail {
 
@@ -111,7 +113,7 @@ namespace def_type::detail {
     constexpr void visit_field_value(Obj& obj, F&& fn) {
         using T = std::remove_cvref_t<Obj>;
         using member_t = def_type::detail::member_type<I, T>;
-        if constexpr (!def_type::is_meta<member_t>) {
+        if constexpr (is_data_member<member_t>) {
             auto& member = def_type::detail::dispatch_get_member<I>(obj);
             fn(def_type::detail::dispatch_field_name_rt<I, T>(), unwrap_value(member));
         }
@@ -128,7 +130,7 @@ namespace def_type::detail {
     constexpr void visit_raw_field(Obj& obj, F&& fn) {
         using T = std::remove_cvref_t<Obj>;
         using member_t = def_type::detail::member_type<I, T>;
-        if constexpr (!def_type::is_meta<member_t>) {
+        if constexpr (is_data_member<member_t>) {
             auto& member = def_type::detail::dispatch_get_member<I>(obj);
             fn(def_type::detail::dispatch_field_name_rt<I, T>(), member);
         }
@@ -144,7 +146,7 @@ namespace def_type::detail {
     template <typename T, std::size_t I, typename F>
     constexpr void visit_field_descriptor(F&& fn) {
         using member_t = def_type::detail::member_type<I, T>;
-        if constexpr (!def_type::is_meta<member_t>) {
+        if constexpr (is_data_member<member_t>) {
             fn(def_type::field_descriptor<T, I>{});
         }
     }
@@ -323,7 +325,7 @@ namespace def_type::detail {
             dynamic_field_def& out, std::string_view target, bool& found) {
         if (found) return;
         using member_t = def_type::detail::member_type<I, TT>;
-        if constexpr (!def_type::is_meta<member_t>) {
+        if constexpr (is_data_member<member_t>) {
             if (def_type::detail::dispatch_field_name_rt<I, TT>() == target) {
                 TT instance{};
                 auto& member = def_type::detail::dispatch_get_member<I>(instance);
@@ -370,7 +372,99 @@ namespace def_type::detail {
     }
 
     template <std::size_t I, typename T>
-    struct is_field_at : std::bool_constant<!def_type::is_meta<
+    struct is_field_at : std::bool_constant<is_data_member<
         def_type::detail::member_type<I, T>>> {};
+
+    // ── Struct-level validator helpers ───────────────────────────────
+    //
+    // Walks every type_validators<> member on T, invokes each contained
+    // validator on the whole instance, and writes findings into the
+    // supplied validation_result with prefix + sub_path joined into .path.
+
+    template <typename Obj, typename TupleT>
+    void run_struct_validator_tuple(
+            const Obj& obj, const TupleT& rules,
+            validation_result& out, std::string_view prefix) {
+        std::apply([&](const auto&... each_validator) {
+            (([&] {
+                using validator_type = std::remove_cvref_t<decltype(each_validator)>;
+                auto validator_name = extract_short_validator_name(
+                    NAMEOF_TYPE(validator_type));
+                auto findings = each_validator(obj);
+                for (auto& finding : findings) {
+                    finding.validator = validator_name;
+                    if (finding.sub_path) {
+                        finding.path = prefix.empty()
+                            ? *finding.sub_path
+                            : std::string(prefix) + "." + *finding.sub_path;
+                    } else {
+                        finding.path = std::string(prefix);
+                    }
+                    out.add(std::move(finding));
+                }
+            }()), ...);
+        }, rules);
+    }
+
+    template <std::size_t I, typename Obj>
+    void try_run_struct_validators_at(
+            const Obj& obj, validation_result& out, std::string_view prefix) {
+        using T = std::remove_cvref_t<Obj>;
+        using member_t = std::remove_cvref_t<def_type::detail::member_type<I, T>>;
+        if constexpr (def_type::is_type_validators<member_t>) {
+            const auto& tv = def_type::detail::dispatch_get_member<I>(obj);
+            run_struct_validator_tuple(obj, tv.rules, out, prefix);
+        }
+    }
+
+    template <typename Obj, std::size_t... Is>
+    void run_struct_validators(
+            const Obj& obj, validation_result& out, std::string_view prefix,
+            std::index_sequence<Is...>) {
+        (try_run_struct_validators_at<Is>(obj, out, prefix), ...);
+    }
+
+    // Short-circuit form for valid(): stop on first failure.
+
+    template <std::size_t I, typename Obj>
+    void check_struct_validators_at(const Obj& obj, bool& is_valid) {
+        if (!is_valid) return;
+        using T = std::remove_cvref_t<Obj>;
+        using member_t = std::remove_cvref_t<def_type::detail::member_type<I, T>>;
+        if constexpr (def_type::is_type_validators<member_t>) {
+            const auto& tv = def_type::detail::dispatch_get_member<I>(obj);
+            std::apply([&](const auto&... each_validator) {
+                (([&] {
+                    if (!is_valid) return;
+                    auto findings = each_validator(obj);
+                    if (!findings.empty()) is_valid = false;
+                }()), ...);
+            }, tv.rules);
+        }
+    }
+
+    template <typename Obj, std::size_t... Is>
+    bool check_all_struct_validators(const Obj& obj, std::index_sequence<Is...>) {
+        bool is_valid = true;
+        (check_struct_validators_at<Is>(obj, is_valid), ...);
+        return is_valid;
+    }
+
+    // ── Compile-time count of all struct-level validators on T ───────
+
+    template <typename T, std::size_t... Is>
+    consteval std::size_t count_struct_validators_impl(std::index_sequence<Is...>) {
+        return (0 + ... +
+            (def_type::is_type_validators<def_type::detail::member_type<Is, T>>
+                ? def_type::detail::type_validators_size_v<
+                    std::remove_cvref_t<def_type::detail::member_type<Is, T>>>
+                : std::size_t{0}));
+    }
+
+    template <typename T>
+    consteval std::size_t count_struct_validators() {
+        constexpr auto N = def_type::detail::dispatch_field_count<T>();
+        return count_struct_validators_impl<T>(std::make_index_sequence<N>{});
+    }
 
 }  // namespace def_type::detail
