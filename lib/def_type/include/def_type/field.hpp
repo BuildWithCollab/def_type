@@ -14,16 +14,9 @@
 
 #include <nameof.hpp>
 
-namespace def_type {
+#include <def_type/validation_error.hpp>
 
-// validation_error is defined in <def_type/validation.hpp> — it has a
-// std::optional<unknown> member which requires unknown to be a complete
-// type, and unknown depends on reflect.hpp (which depends on field.hpp).
-// Forward-declared here so validator_pack can name it in its templated
-// conversion operator; the body of that operator is not instantiated
-// until user code, by which time the umbrella header has pulled in the
-// full definition.
-struct validation_error;
+namespace def_type {
 
 // ── with<Exts...> ───────────────────────────────────────────────────────
 

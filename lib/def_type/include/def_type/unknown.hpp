@@ -10,13 +10,12 @@
 #include <type_traits>
 #include <utility>
 
-#include <def_type/reflect.hpp>
-
 namespace def_type {
 
-    // Forward declarations — defined in <def_type/json.hpp>.
-    // The umbrella header includes json.hpp after unknown.hpp, so these
-    // become visible at the point any unknown member template is instantiated.
+    // Forward declarations — bodies live in later headers that the umbrella
+    // header pulls in after unknown.hpp.  Template member functions of
+    // `unknown` call these in dependent context, so definitions are needed
+    // only at point of instantiation (phase 2), not here.
     namespace detail {
         template <typename T>
         nlohmann::json value_to_json(const T&);
@@ -24,26 +23,10 @@ namespace def_type {
         template <typename T>
         void value_from_json(const nlohmann::json&, T&);
 
-        // Shape-match gate. For reflected structs, succeeds when every JSON
-        // key names a field of T (mirrors oneof<>'s shape-only dispatch).
-        // Non-reflected T (primitives, containers, etc.) have no field schema —
-        // those rely on parse-attempt alone.
+        // Defined in <def_type/detail/unknown_reflect.hpp> (needs reflect.hpp,
+        // which depends on field.hpp — kept out of unknown.hpp to break cycle).
         template <typename T>
-        bool unknown_shape_matches(const nlohmann::json& j) {
-            if constexpr (reflected_struct<T>) {
-                if (!j.is_object()) return false;
-                auto fields = field_names<T>();
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    bool found = false;
-                    for (auto fname : fields)
-                        if (fname == it.key()) { found = true; break; }
-                    if (!found) return false;
-                }
-                return true;
-            } else {
-                return true;
-            }
-        }
+        bool unknown_shape_matches(const nlohmann::json& j);
     }
 
     class unknown {

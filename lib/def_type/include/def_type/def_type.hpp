@@ -5,6 +5,7 @@
 #include <def_type/detail/pfr_backend.hpp>
 #include <def_type/detail/registry_backend.hpp>
 #include <def_type/reflect.hpp>
+#include <def_type/detail/unknown_reflect.hpp>
 #include <def_type/unknown.hpp>
 #include <def_type/validation.hpp>
 #include <def_type/parse.hpp>
