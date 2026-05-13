@@ -1160,14 +1160,14 @@ SignupForm form;
 form.password = "abc";
 form.confirm  = "xyz";
 
-if (auto result = type_def<SignupForm>{}.validate(form); !result) {
+auto result = type_def<SignupForm>{}.validate(form);
+
+if (!result) {
     for (auto& error : result)
         fmt::print("{}: {} ({})\n", error.path, error.message, error.validator);
 }
 // → confirm: passwords do not match (passwords_match)
 ```
-
-`validation_result` is truthy when there are no errors, and iterates directly with range-for — `if (!result)` and `for (auto& e : result)` are the canonical idioms.
 
 Validators are just structs with `operator()` returning `std::vector<validation_error>` — empty vector means valid, any entries mean invalid. There are two shapes:
 
@@ -1395,7 +1395,9 @@ signup_t.create().valid();             // dynamic equivalent
 **`validate()`** for the full report — every field validator, every whole-struct validator, every level of nesting:
 
 ```cpp
-if (auto result = type_def<SignupForm>{}.validate(form); !result) {
+auto result = type_def<SignupForm>{}.validate(form);
+
+if (!result) {
     for (auto& error : result)
         fmt::print("{}: {} ({})\n", error.path, error.message, error.validator);
 }
