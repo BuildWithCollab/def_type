@@ -60,24 +60,32 @@ namespace validations {
         }
     };
 
-    // Fails when value < min or value > max. Generic over any orderable T.
-    // CTAD on positional init: `in_range{0.0, 1.0}` deduces `in_range<double>`.
-    // Designated init defaults to `in_range<int>` — explicit when needed:
-    //   in_range{.min = 1, .max = 100}            // T = int (default)
-    //   in_range<double>{.min = 0.0, .max = 1.0}  // T = double explicit
+    // Fails when value < min or value > max. T is the type of both the bounds
+    // and the value being checked — there is no implicit conversion between
+    // them, so `in_range<int>` will refuse to validate a `double` field at
+    // compile time. T must satisfy `std::totally_ordered` (defines `<`, `>`,
+    // `<=`, `>=`, `==`, `!=`).
+    //
+    // Pick T via CTAD on positional init, or write it explicitly:
+    //   in_range{1, 100}                          // in_range<int>
+    //   in_range{0.0, 1.0}                        // in_range<double>
+    //   in_range{.min = 1, .max = 100}            // in_range<int> (aggregate CTAD)
+    //   in_range<std::int64_t>{.min = 0, .max = 9}
 
-    template <typename T = int>
+    template <std::totally_ordered T>
     struct in_range {
-        T min{};
-        T max{};
+        T min;
+        T max;
 
-        template <typename V>
-            requires requires(const V& v, const T& b) {
-                { v < b } -> std::convertible_to<bool>;
-                { v > b } -> std::convertible_to<bool>;
-            }
-        std::vector<validation_error> operator()(const V& value) const {
-            if (!(value < min) && !(value > max)) return {};
+        // operator() is constrained to U = T — same_as, not convertible_to —
+        // so `in_range<int>` cannot be silently invoked on a double field via
+        // narrowing conversion, and `in_range<double>` cannot be silently
+        // invoked on an int field. Mismatch is a compile error at the field
+        // declaration that pairs validator with wrong-type field.
+        template <typename U>
+            requires std::same_as<U, T>
+        std::vector<validation_error> operator()(const U& value) const {
+            if (value >= min && value <= max) return {};
             return { { .message = fmt::format(
                 "{} must be between {} and {}", value, min, max) } };
         }

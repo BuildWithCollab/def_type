@@ -1185,9 +1185,16 @@ using namespace def_type::validations;
 |-----------|-----------|------------|
 | `not_empty{}` | anything with `.empty()` — `std::string`, `std::vector<T>`, `std::set<T>`, `std::map<...>`, your own | `.empty()` returns true |
 | `max_length{N}` | anything with `.size()` — `std::string`, all standard containers, your own | `.size() > N` |
-| `in_range<T>{.min, .max}` | any orderable `T` — `int`, `int64_t`, `double`, `enum`, your own | value is outside `[min, max]` |
+| `in_range<T>{.min, .max}` | `T` satisfying `std::totally_ordered` — `int`, `int64_t`, `double`, `enum class` with operators, your own | value is outside `[min, max]` |
 
-`in_range` is templated; `T` defaults to `int` so `in_range{.min = 1, .max = 99}` keeps working. For other types, write `in_range<double>{.min = 0.0, .max = 1.0}` or use positional CTAD: `in_range{0.0, 1.0}` deduces `in_range<double>`.
+`in_range` is constrained on `T` and refuses to be called on anything other than `T` — no implicit narrowing, no silent widening, no sign mismatch. Pairing `in_range<int>` with a `field<double>` is a compile error at the field declaration. Deduce `T` via aggregate CTAD (either positional or designated) or spell it explicitly:
+
+```cpp
+in_range{1, 100}                          // in_range<int>
+in_range{0.0, 1.0}                        // in_range<double>
+in_range{.min = 1, .max = 100}            // in_range<int>
+in_range<std::int64_t>{.min = 0, .max = 9}
+```
 
 Combine validators with `validators(...)`:
 

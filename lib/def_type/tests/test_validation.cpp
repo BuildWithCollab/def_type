@@ -1856,8 +1856,8 @@ TEST_CASE("builtins generic: in_range CTAD on positional init", "[validation][bu
     REQUIRE(fail.size() == 1);
 }
 
-TEST_CASE("builtins generic: in_range default template arg is int", "[validation][builtins][generic]") {
-    // Existing-style designated init keeps working — T defaults to int.
+TEST_CASE("builtins generic: in_range aggregate CTAD on designated init", "[validation][builtins][generic]") {
+    // No `int` default — T is deduced from the initializer types.
     auto rule = in_range{.min = 0, .max = 30};
     static_assert(std::is_same_v<decltype(rule), in_range<int>>);
 
@@ -1865,9 +1865,22 @@ TEST_CASE("builtins generic: in_range default template arg is int", "[validation
     REQUIRE(rule(31).size() == 1);
 }
 
+TEST_CASE("builtins generic: in_range<T> refuses mismatched value types", "[validation][builtins][generic]") {
+    // Narrowing (double → int) is refused.
+    static_assert(!std::is_invocable_v<in_range<int>,          double>);
+    // Widening (int → double) is also refused — no implicit conversion.
+    static_assert(!std::is_invocable_v<in_range<double>,       int>);
+    // Sign mismatch is refused.
+    static_assert(!std::is_invocable_v<in_range<std::int64_t>, std::uint64_t>);
+    // Same-type calls compile fine.
+    static_assert( std::is_invocable_v<in_range<int>,          int>);
+    static_assert( std::is_invocable_v<in_range<double>,       double>);
+    static_assert( std::is_invocable_v<in_range<std::int64_t>, std::int64_t>);
+}
+
 TEST_CASE("builtins generic: validator name strips template suffix", "[validation][builtins][generic]") {
     // Whether the user writes `in_range<int>`, `in_range<double>`, or relies
-    // on the int default, error.validator should report just "in_range".
+    // on CTAD, error.validator should report just "in_range".
     WithScore obj;
     obj.score = 99.0;
     auto r = type_def<WithScore>{}.validate(obj);
