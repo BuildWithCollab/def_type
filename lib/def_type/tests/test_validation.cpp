@@ -1729,3 +1729,147 @@ TEST_CASE("nested: validator sub_path composes with outer field prefix", "[valid
     REQUIRE(result.errors()[0].path == "inner.payload.name");
     REQUIRE(result.errors()[1].path == "inner.payload.age");
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// Built-in validators are generic — not_empty / max_length / in_range
+// work on more than std::string / int.
+// ═════════════════════════════════════════════════════════════════════════
+
+#include <chrono>
+#include <map>
+#include <set>
+#include <vector>
+
+// ── not_empty — works on any container with .empty() ────────────────────
+
+struct WithIntList {
+    field<std::vector<int>> tags{.value = {}, .validators = validators(not_empty{})};
+};
+
+struct WithStringSet {
+    field<std::set<std::string>> labels{.value = {}, .validators = validators(not_empty{})};
+};
+
+struct WithStringIntMap {
+    field<std::map<std::string, int>> scores{.value = {}, .validators = validators(not_empty{})};
+};
+
+TEST_CASE("builtins generic: not_empty on std::vector — empty fails", "[validation][builtins][generic]") {
+    WithIntList obj;
+    REQUIRE_FALSE(type_def<WithIntList>{}.valid(obj));
+    obj.tags.value = {1, 2, 3};
+    REQUIRE(type_def<WithIntList>{}.valid(obj));
+}
+
+TEST_CASE("builtins generic: not_empty on std::set", "[validation][builtins][generic]") {
+    WithStringSet obj;
+    REQUIRE_FALSE(type_def<WithStringSet>{}.valid(obj));
+    obj.labels.value.insert("a");
+    REQUIRE(type_def<WithStringSet>{}.valid(obj));
+}
+
+TEST_CASE("builtins generic: not_empty on std::map", "[validation][builtins][generic]") {
+    WithStringIntMap obj;
+    REQUIRE_FALSE(type_def<WithStringIntMap>{}.valid(obj));
+    obj.scores.value["agility"] = 9;
+    REQUIRE(type_def<WithStringIntMap>{}.valid(obj));
+}
+
+TEST_CASE("builtins generic: not_empty on std::vector via dynamic builder", "[validation][builtins][generic]") {
+    auto t = type_def("X")
+        .field<std::vector<int>>("tags", validators(not_empty{}));
+    auto obj = t.create();
+    REQUIRE_FALSE(obj.valid());
+    obj.set("tags", std::vector<int>{1, 2});
+    REQUIRE(obj.valid());
+}
+
+// ── max_length — works on anything with .size() ─────────────────────────
+
+struct WithCappedVector {
+    field<std::vector<int>> items{.value = {}, .validators = validators(max_length{3})};
+};
+
+TEST_CASE("builtins generic: max_length on std::vector — over limit fails", "[validation][builtins][generic]") {
+    WithCappedVector obj;
+    REQUIRE(type_def<WithCappedVector>{}.valid(obj));         // 0 ≤ 3
+    obj.items.value = {1, 2, 3};
+    REQUIRE(type_def<WithCappedVector>{}.valid(obj));         // 3 ≤ 3
+    obj.items.value = {1, 2, 3, 4};
+    auto r = type_def<WithCappedVector>{}.validate(obj);
+    REQUIRE_FALSE(r.ok());
+    REQUIRE(r.errors()[0].validator == "max_length");
+    REQUIRE(r.errors()[0].message.find("4") != std::string::npos);
+}
+
+// ── in_range<T> — generic over orderable types ──────────────────────────
+
+struct WithScore {
+    field<double> score{
+        .value = 0.5,
+        .validators = validators(in_range<double>{.min = 0.0, .max = 1.0})
+    };
+};
+
+TEST_CASE("builtins generic: in_range<double>", "[validation][builtins][generic]") {
+    WithScore obj;
+    REQUIRE(type_def<WithScore>{}.valid(obj));
+    obj.score = 1.5;
+    auto r = type_def<WithScore>{}.validate(obj);
+    REQUIRE_FALSE(r.ok());
+    REQUIRE(r.errors()[0].validator == "in_range");
+    REQUIRE(r.errors()[0].message.find("1.5") != std::string::npos);
+
+    obj.score = -0.1;
+    REQUIRE_FALSE(type_def<WithScore>{}.valid(obj));
+    obj.score = 0.0;
+    REQUIRE(type_def<WithScore>{}.valid(obj));  // boundary
+    obj.score = 1.0;
+    REQUIRE(type_def<WithScore>{}.valid(obj));  // boundary
+}
+
+struct WithBigInt {
+    field<std::int64_t> n{
+        .value = 0,
+        .validators = validators(in_range<std::int64_t>{.min = -1'000'000, .max = 1'000'000})
+    };
+};
+
+TEST_CASE("builtins generic: in_range<int64_t>", "[validation][builtins][generic]") {
+    WithBigInt obj;
+    REQUIRE(type_def<WithBigInt>{}.valid(obj));
+    obj.n = 2'000'000;
+    REQUIRE_FALSE(type_def<WithBigInt>{}.valid(obj));
+    obj.n = -2'000'000;
+    REQUIRE_FALSE(type_def<WithBigInt>{}.valid(obj));
+}
+
+TEST_CASE("builtins generic: in_range CTAD on positional init", "[validation][builtins][generic]") {
+    // in_range{1.5, 9.5} deduces in_range<double>
+    auto rule = in_range{1.5, 9.5};
+    static_assert(std::is_same_v<decltype(rule), in_range<double>>);
+
+    auto findings = rule(5.0);
+    REQUIRE(findings.empty());
+
+    auto fail = rule(10.0);
+    REQUIRE(fail.size() == 1);
+}
+
+TEST_CASE("builtins generic: in_range default template arg is int", "[validation][builtins][generic]") {
+    // Existing-style designated init keeps working — T defaults to int.
+    auto rule = in_range{.min = 0, .max = 30};
+    static_assert(std::is_same_v<decltype(rule), in_range<int>>);
+
+    REQUIRE(rule(15).empty());
+    REQUIRE(rule(31).size() == 1);
+}
+
+TEST_CASE("builtins generic: validator name strips template suffix", "[validation][builtins][generic]") {
+    // Whether the user writes `in_range<int>`, `in_range<double>`, or relies
+    // on the int default, error.validator should report just "in_range".
+    WithScore obj;
+    obj.score = 99.0;
+    auto r = type_def<WithScore>{}.validate(obj);
+    REQUIRE(r.errors()[0].validator == "in_range");
+}

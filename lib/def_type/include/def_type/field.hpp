@@ -40,6 +40,9 @@ namespace detail {
             full_name.remove_prefix(6);
         if (auto last_colon = full_name.rfind("::"); last_colon != std::string_view::npos)
             full_name = full_name.substr(last_colon + 2);
+        // Strip template instantiation suffix: in_range<int> → in_range
+        if (auto angle = full_name.find('<'); angle != std::string_view::npos)
+            full_name = full_name.substr(0, angle);
         return std::string(full_name);
     }
 

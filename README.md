@@ -1183,9 +1183,11 @@ using namespace def_type::validations;
 
 | Validator | Applies to | Fails when |
 |-----------|-----------|------------|
-| `not_empty{}` | `std::string` | String is empty |
-| `max_length{N}` | `std::string` | String length exceeds N |
-| `in_range{.min, .max}` | `int` | Value is outside [min, max] |
+| `not_empty{}` | anything with `.empty()` — `std::string`, `std::vector<T>`, `std::set<T>`, `std::map<...>`, your own | `.empty()` returns true |
+| `max_length{N}` | anything with `.size()` — `std::string`, all standard containers, your own | `.size() > N` |
+| `in_range<T>{.min, .max}` | any orderable `T` — `int`, `int64_t`, `double`, `enum`, your own | value is outside `[min, max]` |
+
+`in_range` is templated; `T` defaults to `int` so `in_range{.min = 1, .max = 99}` keeps working. For other types, write `in_range<double>{.min = 0.0, .max = 1.0}` or use positional CTAD: `in_range{0.0, 1.0}` deduces `in_range<double>`.
 
 Combine validators with `validators(...)`:
 
