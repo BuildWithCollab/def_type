@@ -1160,11 +1160,14 @@ SignupForm form;
 form.password = "abc";
 form.confirm  = "xyz";
 
-auto result = type_def<SignupForm>{}.validate(form);
-result.error_count();              // 1
-result.errors()[0].path;           // "confirm"
-result.errors()[0].validator;      // "passwords_match"
+if (auto result = type_def<SignupForm>{}.validate(form); !result) {
+    for (auto& error : result)
+        fmt::print("{}: {} ({})\n", error.path, error.message, error.validator);
+}
+// → confirm: passwords do not match (passwords_match)
 ```
+
+`validation_result` is truthy when there are no errors, and iterates directly with range-for — `if (!result)` and `for (auto& e : result)` are the canonical idioms.
 
 Validators are just structs with `operator()` returning `std::vector<validation_error>` — empty vector means valid, any entries mean invalid. There are two shapes:
 
@@ -1380,48 +1383,33 @@ signup_t.has_validators();                    // same on the dynamic path
 signup_t.validator_count();
 ```
 
-### valid() — Quick Check
+### Running Validators
 
-Returns `true` if every validator — field-level and whole-struct, at every level of nesting — passes:
+Two entry points. **`valid()`** for a quick yes/no — short-circuits on first failure:
 
 ```cpp
-// Dynamic
-auto obj = t.create();
-obj.valid();            // false — name is "", age is 0
-obj.set("name", std::string("Rex"));
-obj.set("age", 3);
-obj.valid();            // true
-
-// Typed
-ValidatedDog dog;
-type_def<ValidatedDog> dog_t;
-dog_t.valid(dog);       // false
-dog.name = "Rex";
-dog.age = 3;
-dog_t.valid(dog);       // true
+type_def<SignupForm>{}.valid(form);    // true / false
+signup_t.create().valid();             // dynamic equivalent
 ```
 
-### validate() — Detailed Errors
-
-Returns a `validation_result`. It's truthy when there are no errors, and it iterates directly so you don't need to spell out `.errors()`:
+**`validate()`** for the full report — every field validator, every whole-struct validator, every level of nesting:
 
 ```cpp
-auto result = obj.validate();   // or: dog_t.validate(dog)
-
-if (!result) {                  // canonical "did anything fail?" — operator bool
-    for (auto& error : result)  // range-for goes straight over the errors
+if (auto result = type_def<SignupForm>{}.validate(form); !result) {
+    for (auto& error : result)
         fmt::print("{}: {} ({})\n", error.path, error.message, error.validator);
 }
 ```
 
-`result.ok()` is the named equivalent of `bool(result)`, and `result.error_count()` / `result.errors()` are still there when you need the explicit forms. The full surface:
+`validation_result` surface:
 
 | API | Returns | Notes |
 |---|---|---|
 | `bool(result)` / `result.ok()` | `bool` | true when no errors |
+| `!result` | `bool` | true when there *are* errors — the canonical conditional |
 | `result.error_count()` | `std::size_t` | |
-| `result.errors()` | `const std::vector<validation_error>&` | explicit access to the underlying vector |
-| `begin() / end()` | iterators | makes range-for work directly on the result |
+| `result.errors()` | `const std::vector<validation_error>&` | explicit vector access |
+| `begin()` / `end()` | iterators | makes range-for work on the result directly |
 
 Each `validation_error` carries:
 
