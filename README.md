@@ -1140,14 +1140,38 @@ auto j = obj.to_json();
 
 ## Validation
 
-Validators in `def_type` come in two shapes. Both are just structs with `operator()` returning `std::vector<validation_error>` — empty vector means valid, any entries mean invalid. The only differences are *what they receive* and *where you attach them*.
+```cpp
+struct passwords_match {
+    template <typename S>
+    std::vector<validation_error> operator()(const S& s) const {
+        if (s.password.value == s.confirm.value) return {};
+        return {{.message = "passwords do not match", .sub_path = "confirm"}};
+    }
+};
 
-| Kind | Receives | Attaches via |
-|---|---|---|
-| **Field validator** | the field's value (`const T&`) | `field<T>{.validators = validators(...)}` (typed) or `.field<V>(name, validators(...))` (dynamic) |
-| **Whole-struct validator** | the whole instance — `const T&` (typed) or `const type_instance&` (dynamic) | `type_validators<Vs...>` marker member (typed) or `.validators(...)` on the builder (dynamic) |
+struct SignupForm {
+    type_validators<passwords_match> rules { passwords_match{} };
 
-Both kinds run together when you call `valid()` / `validate()` / `parse()`, and everything in the rest of this section — built-ins, writing your own, multi-finding, `.code` / `.data` / `.sub_path`, "doesn't block I/O", nesting recursion — applies to both unless explicitly noted.
+    field<std::string> password { .value = "", .validators = validators(not_empty{}) };
+    field<std::string> confirm  { .value = "", .validators = validators(not_empty{}) };
+};
+
+SignupForm form;
+form.password = "abc";
+form.confirm  = "xyz";
+
+auto result = type_def<SignupForm>{}.validate(form);
+result.error_count();              // 1
+result.errors()[0].path;           // "confirm"
+result.errors()[0].validator;      // "passwords_match"
+```
+
+Validators are just structs with `operator()` returning `std::vector<validation_error>` — empty vector means valid, any entries mean invalid. There are two shapes:
+
+- **Field validators** receive one field's value. Attach via `field<T>::validators` (typed) or pass `validators(...)` to `.field<V>(...)` on the dynamic builder.
+- **Whole-struct validators** receive the whole instance — `const T&` (typed) or `const type_instance&` (dynamic). Attach via a `type_validators<Vs...>` marker member (typed) or `.validators(...)` on the builder (dynamic).
+
+Both fire together when you call `valid()` / `validate()` / `parse()`. Everything below — built-ins, writing your own, multi-finding, `.code` / `.data` / `.sub_path`, "doesn't block I/O", nesting — applies to both unless noted.
 
 ### Built-in Validators
 
@@ -1203,20 +1227,23 @@ struct starts_with_uppercase {
 };
 ```
 
-**Whole-struct validator** — receives the whole instance. Typed validators take `const T&` and read fields directly. Dynamic validators take `const type_instance&` and probe by field name:
+**Whole-struct validator** — receives the whole instance. Typed validators take `const T&` and read fields directly; templating `operator()` on `S` lets the validator be defined *before* the struct it inspects, avoiding a forward-declaration dance:
 
 ```cpp
-// Typed — direct field access
 struct passwords_match {
-    std::vector<validation_error> operator()(const SignupForm& s) const {
+    template <typename S>
+    std::vector<validation_error> operator()(const S& s) const {
         if (s.password.value == s.confirm.value) return {};
         return { { .message  = "passwords do not match",
                    .code     = "password_mismatch",
                    .sub_path = "confirm" } };
     }
 };
+```
 
-// Dynamic — runtime probing
+Dynamic-path validators take `const type_instance&` and probe by field name:
+
+```cpp
 struct passwords_match {
     std::vector<validation_error> operator()(const type_instance& obj) const {
         if (obj.get<std::string>("password") == obj.get<std::string>("confirm"))
@@ -1491,7 +1518,8 @@ The same multi-finding pattern is how a whole-struct validator points at several
 
 ```cpp
 struct passwords_match {
-    std::vector<validation_error> operator()(const SignupForm& s) const {
+    template <typename S>
+    std::vector<validation_error> operator()(const S& s) const {
         if (s.password.value == s.confirm.value) return {};
         return {
             {.message = "passwords do not match", .code = "mismatch", .sub_path = "password"},
