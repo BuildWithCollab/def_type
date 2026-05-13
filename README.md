@@ -1491,9 +1491,11 @@ struct password_policy_with_data {
 The consumer reads the typed data back with the same `.is<T>()` / `.try_as<T>()` API used everywhere else in the library:
 
 ```cpp
-for (auto& error : result.errors()) {
-    if (auto data = error.data ? error.data->try_as<too_short_data>() : std::nullopt; data)
-        ui.show_hint(std::format("Need {} chars, got {}", data->min, data->actual));
+for (auto& error : result) {
+    if (!error.data) continue;
+    auto data = error.data->try_as<too_short_data>();
+    if (!data) continue;
+    ui.show_hint(std::format("Need {} chars, got {}", data->min, data->actual));
 }
 ```
 
