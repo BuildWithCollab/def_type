@@ -1403,26 +1403,37 @@ dog_t.valid(dog);       // true
 
 ### validate() — Detailed Errors
 
-Returns a `validation_result` with all errors:
+Returns a `validation_result`. It's truthy when there are no errors, and it iterates directly so you don't need to spell out `.errors()`:
 
 ```cpp
-auto result = obj.validate();  // or: dog_t.validate(dog)
+auto result = obj.validate();   // or: dog_t.validate(dog)
 
-result.ok();                   // true if no errors
-result.error_count();          // number of errors
-!result;                       // same as !result.ok() — operator bool
-
-for (auto& error : result.errors()) {
-    // Always present:
-    error.message;        // std::string — human-readable, default-rendered prose
-    error.path;           // std::string — final field path, e.g. "address.zip"
-    error.validator;      // std::string — validator struct name, e.g. "not_empty"
-
-    // Optional — populated only when the validator opted in:
-    error.code;           // std::optional<std::string> — stable id for this finding
-    error.sub_path;       // std::optional<std::string> — position inside the value
-    error.data;           // std::optional<unknown>     — typed user struct with extras
+if (!result) {                  // canonical "did anything fail?" — operator bool
+    for (auto& error : result)  // range-for goes straight over the errors
+        fmt::print("{}: {} ({})\n", error.path, error.message, error.validator);
 }
+```
+
+`result.ok()` is the named equivalent of `bool(result)`, and `result.error_count()` / `result.errors()` are still there when you need the explicit forms. The full surface:
+
+| API | Returns | Notes |
+|---|---|---|
+| `bool(result)` / `result.ok()` | `bool` | true when no errors |
+| `result.error_count()` | `std::size_t` | |
+| `result.errors()` | `const std::vector<validation_error>&` | explicit access to the underlying vector |
+| `begin() / end()` | iterators | makes range-for work directly on the result |
+
+Each `validation_error` carries:
+
+```cpp
+error.message;        // std::string  — human-readable, required
+error.path;           // std::string  — final field path, e.g. "address.zip"
+error.validator;      // std::string  — validator struct name (via nameof), e.g. "not_empty"
+
+// Optional — populated only when the validator opted in:
+error.code;           // std::optional<std::string> — stable id for this finding
+error.sub_path;       // std::optional<std::string> — position inside the value
+error.data;           // std::optional<unknown>     — typed user struct with extras
 ```
 
 **Who fills what:** validators fill `.message` (required) and may fill `.code`, `.sub_path`, `.data`. The framework fills `.path` (field name joined with `sub_path`) and `.validator` (the struct's name via `nameof`). Anything a validator writes into `.path` or `.validator` gets overwritten.
