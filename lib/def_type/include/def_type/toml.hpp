@@ -156,10 +156,21 @@ namespace detail {
             if (v.has_value()) merge_into_toml(src, *v);
             // Empty optional: leave src untouched. (Removal is a later concern.)
         } else if constexpr (is_iterable_array_v<T>) {
-            // Rebuild the array from scratch — element-position comment
-            // alignment in arrays is fragile; we preserve comments on the
-            // array as a whole but not on individual elements for v1.
-            src = value_to_toml(v);
+            // Merge in parallel when sizes match — preserves per-element
+            // comments. Fall back to rebuild when sizes differ (no obvious
+            // mapping between new elements and old comments).
+            if (!src.is_array()) {
+                src = value_to_toml(v);
+            } else if (src.as_array().size() == v.size()) {
+                auto& arr = src.as_array();
+                std::size_t idx = 0;
+                for (const auto& elem : v) {
+                    merge_into_toml(arr[idx], elem);
+                    ++idx;
+                }
+            } else {
+                src = value_to_toml(v);
+            }
         } else if constexpr (is_map_v<T>) {
             // Update keys in place; add new keys, remove vanished keys
             auto& tbl = src.as_table();
