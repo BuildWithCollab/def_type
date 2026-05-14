@@ -62,6 +62,10 @@ namespace detail {
         } else if constexpr (std::is_floating_point_v<T>) {
             return ::toml::value(static_cast<double>(v));
         } else {
+            static_assert(!is_non_string_keyed_map_v<T>,
+                "def_type: map keys must be std::string for serialization. "
+                "TOML table keys (like JSON object keys) are strings; "
+                "non-string-keyed maps have no representation.");
             return ::toml::value(v);
         }
     }
@@ -139,6 +143,10 @@ namespace detail {
             else if (v.is_integer())  out = static_cast<T>(v.as_integer());
             else throw std::logic_error("from_toml: expected number");
         } else {
+            static_assert(!is_non_string_keyed_map_v<T>,
+                "def_type: map keys must be std::string for serialization. "
+                "TOML table keys (like JSON object keys) are strings; "
+                "non-string-keyed maps have no representation.");
             out = v.as<T>();
         }
     }

@@ -71,6 +71,27 @@ namespace detail {
     template <typename V, typename Hash, typename Eq>
     inline constexpr bool is_map_v<ankerl::unordered_dense::map<std::string, V, Hash, Eq>> = true;
 
+    // ── is_non_string_keyed_map_v ───────────────────────────────────
+    // Detects the specific "map with a non-std::string key" mistake so we
+    // can surface a one-line static_assert instead of a wall of template
+    // errors from nlohmann::json / toml11 trying to construct from a type
+    // they can't represent.
+
+    template <typename T>
+    inline constexpr bool is_non_string_keyed_map_v = false;
+
+    template <typename K, typename V, typename Cmp, typename Alloc>
+        requires (!std::is_same_v<std::remove_cvref_t<K>, std::string>)
+    inline constexpr bool is_non_string_keyed_map_v<std::map<K, V, Cmp, Alloc>> = true;
+
+    template <typename K, typename V, typename Hash, typename Eq, typename Alloc>
+        requires (!std::is_same_v<std::remove_cvref_t<K>, std::string>)
+    inline constexpr bool is_non_string_keyed_map_v<std::unordered_map<K, V, Hash, Eq, Alloc>> = true;
+
+    template <typename K, typename V, typename Hash, typename Eq>
+        requires (!std::is_same_v<std::remove_cvref_t<K>, std::string>)
+    inline constexpr bool is_non_string_keyed_map_v<ankerl::unordered_dense::map<K, V, Hash, Eq>> = true;
+
     // ── Extract inner type from containers ──────────────────────────
 
     template <typename T>
@@ -190,6 +211,10 @@ namespace detail {
                 return nlohmann::json(static_cast<std::underlying_type_t<T>>(v));
             return nlohmann::json(std::string(name));
         } else {
+            static_assert(!is_non_string_keyed_map_v<T>,
+                "def_type: map keys must be std::string for serialization. "
+                "JSON object keys (and TOML table keys) are strings; "
+                "non-string-keyed maps have no representation.");
             return nlohmann::json(v);
         }
     }
@@ -273,6 +298,10 @@ namespace detail {
             if (!j.is_number()) throw std::logic_error("from_json: expected number");
             out = j.get<T>();
         } else {
+            static_assert(!is_non_string_keyed_map_v<T>,
+                "def_type: map keys must be std::string for serialization. "
+                "JSON object keys (and TOML table keys) are strings; "
+                "non-string-keyed maps have no representation.");
             out = j.get<T>();
         }
     }
