@@ -33,6 +33,12 @@ option("enable_pfr")
     set_description("Enable PFR backend for automatic reflection")
 option_end()
 
+option("toml_support")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Enable TOML serialization support (requires toml11)")
+option_end()
+
 add_requires("fmt")
 add_requires("unordered_dense")
 add_requires("magic_enum")
@@ -42,6 +48,10 @@ add_requires(get_config("nlohmann_json_pkg"), { alias = "nlohmann_json" })
 
 if get_config("enable_pfr") then
     add_requires("pfr_non_boost")
+end
+
+if get_config("toml_support") then
+    add_requires("toml11")
 end
 
 if get_config("build_tests") then

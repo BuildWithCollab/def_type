@@ -13,6 +13,11 @@ target("def_type")
         add_defines("DEF_TYPE_HAS_PFR", { public = true })
     end
 
+    if get_config("toml_support") then
+        add_packages("toml11", { public = true })
+        add_defines("DEF_TYPE_TOML=1", { public = true })
+    end
+
 if get_config("build_tests") then
     target("tests-def_type")
         set_kind("binary")

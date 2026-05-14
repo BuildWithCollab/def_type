@@ -19,3 +19,7 @@
 #include <def_type/oneof.hpp>
 #include <def_type/json.hpp>
 #include <def_type/detail/dynamic_json.hpp>
+
+#ifdef DEF_TYPE_TOML
+#include <def_type/toml.hpp>
+#endif
