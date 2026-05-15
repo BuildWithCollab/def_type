@@ -14,6 +14,8 @@ Just write a normal C++ struct — `type_def<T>` discovers every member automati
 - [Working with Data](#working-with-data)
 - [Iteration](#iteration)
 - [JSON Serialization](#json-serialization)
+- [TOML Serialization](#toml-serialization)
+- [YAML Serialization](#yaml-serialization)
 - [Variants with `oneof<>`](#variants-with-oneof)
 - [Type-Erased JSON with `unknown`](#type-erased-json-with-unknown)
 - [Dynamic Nesting](#dynamic-nesting)
@@ -241,7 +243,7 @@ Weather weather{};  // city is "", days is 7
 
 ### Supported Field Types
 
-`field<T>` and dynamic `.field<T>()` support any type, but JSON serialization and reflection have specific support for:
+`field<T>` and dynamic `.field<T>()` support any type, but serialization (JSON, TOML, and YAML) and reflection have specific support for:
 
 - **Primitives:** `int`, `float`, `double`, `bool`, `std::string`, `int64_t`, `uint64_t`
 - **Enums:** any `enum class` — serialized by name via magic_enum (e.g. `Color::blue` → `"blue"`)
@@ -698,6 +700,177 @@ auto j = to_json(p);
 auto restored = from_json<Person>(j);
 restored.address.value.street.value;  // "123 Main St"
 ```
+
+---
+
+## TOML Serialization
+
+TOML serialization mirrors JSON's surface with one extra property no other C++ serialization framework offers: **comment-preserving round-trip**. Parse a TOML config, mutate fields on the resulting struct, write it back — the original comments, key order, blank lines, and any source keys your struct doesn't model all survive the trip untouched.
+
+Built on [toml11](https://github.com/ToruNiina/toml11). Enabled by default — disable with `--toml_support=n` at config time if you want to drop the dependency.
+
+### to_toml — Struct to TOML
+
+For plain emit (no source text to preserve), use `to_toml` or `to_toml_string`:
+
+```cpp
+struct Dog {
+    field<std::string> name;
+    field<int>         age;
+    field<bool>        good_boy;
+};
+
+Dog rex;
+rex.name      = "Rex";
+rex.age       = 3;
+rex.good_boy  = true;
+
+::toml::value v = to_toml(rex);
+std::string   s = to_toml_string(rex);
+// name = "Rex"
+// age = 3
+// good_boy = true
+```
+
+### from_toml — TOML to `toml_doc<T>`
+
+`from_toml<T>` returns a `toml_doc<T>` that holds **both** the typed struct AND the original `::toml::value` AST alongside it. The struct is what you read and edit; the source AST is what comment-preserving re-emit walks on save:
+
+```cpp
+auto doc = from_toml<Dog>(R"(
+# Top-of-file comment
+name = "Rex"       # the dog's name
+age = 3
+good_boy = true
+)");
+
+// Typed access via operator-> / operator*
+doc->name.value;       // "Rex"
+doc->age.value;        // 3
+
+// The source AST is held alongside — used on save to preserve comments
+doc.source.is_table(); // true
+```
+
+The shape mirrors `parse_result<T>` — the typed value is the front door, the source AST is right there for anyone who wants to drop down to raw toml11.
+
+### Comment-preserving round-trip
+
+`to_toml_string(const toml_doc<T>&)` walks the struct, updates values inside the held `::toml::value` **in-place** (via toml11's `as_<type>()` mutable refs, which don't replace the value's `comments_` field), then formats. Comments survive because each node was edited, not replaced:
+
+```cpp
+auto doc = from_toml<Dog>(R"(
+# Top-of-file comment
+
+name = "Rex"       # the dog's name
+age = 3
+good_boy = true
+)");
+
+doc->age = 7;          // mutate one field
+
+std::string out = to_toml_string(doc);
+// # Top-of-file comment
+//
+// name = "Rex"       # the dog's name
+// age = 7
+// good_boy = true
+```
+
+### Forward-compatibility — unknown source keys survive
+
+If the source TOML has keys your struct doesn't model, they stay in `doc.source` and re-emit verbatim. **Older versions of your tool can edit configs written by newer versions without corrupting unknown keys** — they flow through untouched:
+
+```cpp
+struct AppConfig {
+    field<std::string> app_name;
+    // notice: no `experimental_mode` field
+};
+
+auto doc = from_toml<AppConfig>(R"(
+app_name = "myapp"
+
+# Feature flag — added in v2, old tool doesn't know about it
+experimental_mode = true
+)");
+
+doc->app_name = "renamed";
+auto out = to_toml_string(doc);
+// app_name = "renamed"
+//
+// # Feature flag — added in v2, old tool doesn't know about it
+// experimental_mode = true
+```
+
+### Shape mapping
+
+The struct shape maps to TOML mechanically — no schema decoration required:
+
+| C++ shape | TOML shape |
+|---|---|
+| primitive at top level | bare top-level key |
+| nested struct | `[section]` |
+| nested-nested struct | `[outer.inner]` dotted section |
+| `std::vector<primitive>` | inline array `= [...]` |
+| `std::vector<reflected_struct>` | `[[array_of_tables]]` |
+| `std::map<std::string, primitive>` | `[section]` |
+| `std::map<std::string, reflected_struct>` | `[section.<key>]` per entry |
+| `std::optional<T>` | omitted when empty |
+| `enum class` | string via magic_enum |
+
+### Not yet covered
+
+`oneof<>` and `unknown` are JSON-only at the moment — they have format-specific dispatch logic that doesn't translate directly to TOML's value model. Coming later if there's demand.
+
+---
+
+## YAML Serialization
+
+YAML serialization mirrors JSON's surface — `from_yaml<T>` returns a plain `T`, `to_yaml_string(const T&)` returns a string. **No `yaml_doc<T>` wrapper**, because no serious C++ YAML library preserves comments through a parse → emit cycle (verified against yaml-cpp, rapidyaml, and fkYAML — all three discard comments at the tokenizer level). If you need comment-preserving config editing, use [TOML](#toml-serialization).
+
+Built on [yaml-cpp](https://github.com/jbeder/yaml-cpp). Enabled by default — disable with `--yaml_support=n` at config time.
+
+### to_yaml — Struct to YAML
+
+```cpp
+struct Dog {
+    field<std::string> name;
+    field<int>         age;
+    field<bool>        good_boy;
+};
+
+Dog rex;
+rex.name      = "Rex";
+rex.age       = 3;
+rex.good_boy  = true;
+
+YAML::Node  n = to_yaml(rex);
+std::string s = to_yaml_string(rex);
+// name: Rex
+// age: 3
+// good_boy: true
+```
+
+### from_yaml — YAML to Struct
+
+```cpp
+auto rex = from_yaml<Dog>(R"(
+name: Rex
+age: 3
+good_boy: true
+)");
+
+rex.name.value;    // "Rex"
+rex.age.value;     // 3
+```
+
+### Shape coverage
+
+Identical to JSON — primitives, `enum class` (via magic_enum), `std::vector<T>`, `std::map<std::string, T>` (and `std::unordered_map` / `ankerl::unordered_dense::map`), `std::set` / `std::unordered_set`, `std::optional<T>` (empty omitted), nested reflected structs, nested containers. The same `field<T>` and dynamic-builder paths work the same way.
+
+### Not yet covered
+
+Same as TOML — `oneof<>` and `unknown` are JSON-only at the moment.
 
 ---
 
@@ -1817,7 +1990,11 @@ type_def("X").field<int>("x").meta<tag_info>();  // throws — absent meta
 ## Dependencies
 
 - **Required:** [nlohmann/json](https://github.com/nlohmann/json), [fmt](https://github.com/fmtlib/fmt), [unordered_dense](https://github.com/martinus/unordered_dense), [nameof](https://github.com/Neargye/nameof)
-- **Optional:** [PFR](https://github.com/boostorg/pfr) (automatic field names), [magic_enum](https://github.com/Neargye/magic_enum) (enum name serialization)
+- **Optional:**
+  - [PFR](https://github.com/boostorg/pfr) — automatic field names (enabled by default; disable with `--enable_pfr=n`)
+  - [magic_enum](https://github.com/Neargye/magic_enum) — enum name serialization
+  - [toml11](https://github.com/ToruNiina/toml11) — TOML serialization (enabled by default; disable with `--toml_support=n`)
+  - [yaml-cpp](https://github.com/jbeder/yaml-cpp) — YAML serialization (enabled by default; disable with `--yaml_support=n`)
 
 ## Building
 
@@ -1826,3 +2003,11 @@ xmake f -m release -c -y
 xmake build -a
 xmake run tests-def_type
 ```
+
+To build without optional formats:
+
+```bash
+xmake f --toml_support=n --yaml_support=n -m release -c -y
+```
+
+When a format is disabled, its header (`<def_type/toml.hpp>` / `<def_type/yaml.hpp>`) isn't auto-included by `<def_type.hpp>` and the corresponding package isn't required.
