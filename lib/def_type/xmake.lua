@@ -18,6 +18,11 @@ target("def_type")
         add_defines("DEF_TYPE_TOML=1", { public = true })
     end
 
+    if get_config("yaml_support") then
+        add_packages("yaml-cpp", { public = true })
+        add_defines("DEF_TYPE_YAML=1", { public = true })
+    end
+
 if get_config("build_tests") then
     target("tests-def_type")
         set_kind("binary")

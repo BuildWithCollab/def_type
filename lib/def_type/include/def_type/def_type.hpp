@@ -23,3 +23,7 @@
 #ifdef DEF_TYPE_TOML
 #include <def_type/toml.hpp>
 #endif
+
+#ifdef DEF_TYPE_YAML
+#include <def_type/yaml.hpp>
+#endif
